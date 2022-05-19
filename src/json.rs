@@ -4,7 +4,6 @@ use crate::integer::{Base, Int};
 use once_cell::sync::OnceCell;
 use std::collections::HashSet;
 use std::fmt;
-use std::sync::Mutex;
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -23,6 +22,7 @@ pub struct Json {
     strict_numeric_limits: bool,
     multiline_strings: bool,
     bare_keys: bool,
+    compact: bool,
 }
 
 impl Json {
@@ -59,6 +59,11 @@ impl Json {
         self.bare_keys = b;
         self
     }
+    pub fn compact(mut self, b: bool) -> Self {
+        self.compact = b;
+        self
+    }
+
 }
 
 impl fmt::Display for Json {
@@ -76,6 +81,7 @@ impl fmt::Display for Json {
             strict_numeric_limits: self.strict_numeric_limits,
             multiline_strings: self.multiline_strings,
             bare_keys: self.bare_keys,
+            compact: self.compact,
         };
         emitter.emit_node(f, &self.document).map_err(|_| fmt::Error)
     }
@@ -92,6 +98,7 @@ impl Document {
             strict_numeric_limits: true,
             multiline_strings: false,
             bare_keys: false,
+            compact: false,
         }
     }
 
@@ -113,6 +120,7 @@ pub struct JsonEmitter {
     strict_numeric_limits: bool,
     multiline_strings: bool,
     bare_keys: bool,
+    compact: bool,
 }
 
 impl Default for JsonEmitter {
@@ -126,6 +134,7 @@ impl Default for JsonEmitter {
             strict_numeric_limits: true,
             multiline_strings: false,
             bare_keys: false,
+            compact: false,
         }
     }
 }
@@ -142,21 +151,30 @@ impl JsonEmitter {
             Document::Sequence(s) => self.emit_sequence(w, s),
             Document::Bytes(v) => self.emit_bytes(w, v),
             Document::Null => self.emit_null(w),
+            Document::Compact(d) => self.emit_compact(w, d),
         }
+    }
+
+    fn emit_compact<W: fmt::Write>(&mut self, w: &mut W, node: &Document) -> Result<()> {
+        let compact = self.compact;
+        self.compact = true;
+        self.emit_node(w, node)?;
+        self.compact = compact;
+        Ok(())
     }
 
     fn emit_bytes<W: fmt::Write>(&mut self, w: &mut W, bytes: &[u8]) -> Result<()> {
         self.level += 1;
-        writeln!(w, "[")?;
+        self.writeln(w, "[")?;
         self.emit_indent(w)?;
         for (i, value) in bytes.iter().enumerate() {
             if i > 0 {
-                writeln!(w, ",")?;
+                self.writeln(w, ",")?;
                 self.emit_indent(w)?;
             }
             write!(w, "{}", value)?;
         }
-        writeln!(w)?;
+        self.writeln(w, "")?;
         self.level -= 1;
         self.emit_indent(w)?;
         write!(w, "]")?;
@@ -165,16 +183,16 @@ impl JsonEmitter {
 
     fn emit_sequence<W: fmt::Write>(&mut self, w: &mut W, sequence: &[Document]) -> Result<()> {
         self.level += 1;
-        writeln!(w, "[")?;
+        self.writeln(w, "[")?;
         self.emit_indent(w)?;
         for (i, value) in sequence.iter().enumerate() {
             if i > 0 {
-                writeln!(w, ",")?;
+                self.writeln(w, ",")?;
                 self.emit_indent(w)?;
             }
             self.emit_node(w, value)?;
         }
-        writeln!(w)?;
+        self.writeln(w, "")?;
         self.level -= 1;
         self.emit_indent(w)?;
         write!(w, "]")?;
@@ -183,12 +201,12 @@ impl JsonEmitter {
 
     fn emit_mapping<W: fmt::Write>(&mut self, w: &mut W, mapping: &[KeyValue]) -> Result<()> {
         self.level += 1;
-        writeln!(w, "{{")?;
+        self.writeln(w, "{")?;
         self.emit_indent(w)?;
         let mut comments = 0;
         for (i, KeyValue(key, value)) in mapping.iter().enumerate() {
             if i - comments > 0 {
-                writeln!(w, ",")?;
+                self.writeln(w, ",")?;
                 self.emit_indent(w)?;
             }
             match key {
@@ -211,12 +229,13 @@ impl JsonEmitter {
                 Document::Mapping(_) => return Err(Error::KeyTypeError("mapping")),
                 Document::Sequence(_) => return Err(Error::KeyTypeError("sequence")),
                 Document::Bytes(_) => return Err(Error::KeyTypeError("bytes")),
+                Document::Compact(_) => return Err(Error::KeyTypeError("compact")),
                 Document::Null => return Err(Error::KeyTypeError("null")),
             };
             write!(w, ": ")?;
             self.emit_node(w, value)?;
         }
-        writeln!(w)?;
+        self.writeln(w, "")?;
         self.level -= 1;
         self.emit_indent(w)?;
         write!(w, "}}")?;
@@ -224,7 +243,7 @@ impl JsonEmitter {
     }
 
     fn emit_comment<W: fmt::Write>(&mut self, w: &mut W, comment: &str) -> Result<()> {
-        if self.comment.is_none() {
+        if self.comment.is_none() || self.compact {
             return Ok(());
         }
         for line in comment.split('\n') {
@@ -297,11 +316,26 @@ impl JsonEmitter {
     }
 
     fn emit_indent<W: fmt::Write>(&mut self, w: &mut W) -> Result<()> {
+        if self.compact {
+            return Ok(())
+        }
         let mut len = self.level * self.indent;
         while len > 0 {
             let chunk = std::cmp::min(len, SPACE.len());
             write!(w, "{}", &SPACE[..chunk])?;
             len -= chunk;
+        }
+        Ok(())
+    }
+
+    fn writeln<W: fmt::Write>(&mut self, w: &mut W, s: &str) -> Result<()> {
+        if self.compact {
+            match s {
+                "," => write!(w, ", ")?,
+                _ => write!(w, "{}", s)?,
+            };
+        } else {
+            writeln!(w, "{}", s)?;
         }
         Ok(())
     }
@@ -420,7 +454,7 @@ fn is_legal_bareword(word: &str) -> bool {
 mod test {
     use super::*;
 
-    fn int(v: u32) -> Document {
+    fn int(v: i32) -> Document {
         Document::Int(Int::new(v, Base::Dec))
     }
     fn hex(v: u32) -> Document {
@@ -447,6 +481,16 @@ mod test {
     fn kv(k: &str, v: Document) -> KeyValue {
         KeyValue(string(k), v)
     }
+    fn nes_address(seg: &str, bank: i32, addr: u32) -> Document {
+        Document::Compact(
+            Document::Mapping(vec![
+                kv(seg, Document::Sequence(vec![
+                    int(bank),
+                    hex(addr),
+                ]))
+            ]).into()
+        )
+    }
 
     #[test]
     fn basic_document() {
@@ -470,7 +514,6 @@ mod test {
         // Integer wants to be hex, hex literals allowed.
         let i = hex(16).to_json5();
         assert_eq!(i.to_string(), "0x10");
-
         let s = string("hello").to_json();
         assert_eq!(s.to_string(), "\"hello\"");
         let f = float(3.14159).to_json();
@@ -521,6 +564,41 @@ mod test {
             kv("b", int(10)),
             kv("c", hex(15)),
             kv("true", string("foo")),
+        ])
+        .to_json5();
+        assert_eq!(map.to_string(), expect);
+    }
+
+    #[test]
+    fn compact_map5() {
+        let expect = r#"{a: 5, b: 10, c: 0xF, "true": "foo"}"#;
+        let map = Document::Mapping(vec![
+            kv("a", int(5)),
+            kv("b", int(10)),
+            kv("c", hex(15)),
+            kv("true", string("foo")),
+        ])
+        .to_json5().compact(true);
+        assert_eq!(map.to_string(), expect);
+    }
+
+    #[test]
+    fn mixed_map5() {
+        let expect = r#"{
+  gameplay: {prg: [0, 0x8000]},
+  overworld: {prg: [1, 0x8000]},
+  palaces: {prg: [4, 0x8000]},
+  title: {prg: [5, 0x8000]},
+  music: {prg: [6, 0x8000]},
+  reset: {prg: [-1, 0xFFFA]}
+}"#;
+        let map = Document::Mapping(vec![
+            kv("gameplay", nes_address("prg", 0, 0x8000)),
+            kv("overworld", nes_address("prg", 1, 0x8000)),
+            kv("palaces", nes_address("prg", 4, 0x8000)),
+            kv("title", nes_address("prg", 5, 0x8000)),
+            kv("music", nes_address("prg", 6, 0x8000)),
+            kv("reset", nes_address("prg", -1, 0xFFFA)),
         ])
         .to_json5();
         assert_eq!(map.to_string(), expect);

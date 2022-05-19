@@ -28,4 +28,5 @@ pub enum Document {
     Sequence(Vec<Document>),
     Bytes(Vec<u8>),
     Null,
+    Compact(Box<Document>),
 }
