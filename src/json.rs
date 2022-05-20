@@ -13,6 +13,13 @@ pub enum Comment {
     SlashSlash,
 }
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum Multiline {
+    None,
+    Json5,
+    Hjson,
+}
+
 pub struct Json {
     document: Document,
     indent: usize,
@@ -20,7 +27,7 @@ pub struct Json {
     bases: HashSet<Base>,
     literals: HashSet<Base>,
     strict_numeric_limits: bool,
-    multiline_strings: bool,
+    multiline: Multiline,
     bare_keys: bool,
     compact: bool,
 }
@@ -51,8 +58,8 @@ impl Json {
         self.strict_numeric_limits = b;
         self
     }
-    pub fn multiline_strings(mut self, b: bool) -> Self {
-        self.multiline_strings = b;
+    pub fn multiline(mut self, m: Multiline) -> Self {
+        self.multiline = m;
         self
     }
     pub fn bare_keys(mut self, b: bool) -> Self {
@@ -63,7 +70,6 @@ impl Json {
         self.compact = b;
         self
     }
-
 }
 
 impl fmt::Display for Json {
@@ -79,7 +85,7 @@ impl fmt::Display for Json {
             bases: self.bases.clone(),
             literals: self.literals.clone(),
             strict_numeric_limits: self.strict_numeric_limits,
-            multiline_strings: self.multiline_strings,
+            multiline: self.multiline,
             bare_keys: self.bare_keys,
             compact: self.compact,
         };
@@ -96,7 +102,7 @@ impl Document {
             bases: HashSet::from([Base::Dec]),
             literals: HashSet::from([Base::Dec]),
             strict_numeric_limits: true,
-            multiline_strings: false,
+            multiline: Multiline::None,
             bare_keys: false,
             compact: false,
         }
@@ -106,7 +112,14 @@ impl Document {
         self.to_json()
             .comment(Comment::SlashSlash)
             .literals(&[Base::Hex])
-            .multiline_strings(true)
+            .multiline(Multiline::Json5)
+            .bare_keys(true)
+    }
+
+    pub fn to_hjson(self) -> Json {
+        self.to_json()
+            .comment(Comment::Hash)
+            .multiline(Multiline::Hjson)
             .bare_keys(true)
     }
 }
@@ -118,7 +131,7 @@ pub struct JsonEmitter {
     bases: HashSet<Base>,
     literals: HashSet<Base>,
     strict_numeric_limits: bool,
-    multiline_strings: bool,
+    multiline: Multiline,
     bare_keys: bool,
     compact: bool,
 }
@@ -132,7 +145,7 @@ impl Default for JsonEmitter {
             bases: HashSet::new(),
             literals: HashSet::new(),
             strict_numeric_limits: true,
-            multiline_strings: false,
+            multiline: Multiline::None,
             bare_keys: false,
             compact: false,
         }
@@ -143,7 +156,7 @@ impl JsonEmitter {
     fn emit_node<W: fmt::Write>(&mut self, w: &mut W, node: &Document) -> Result<()> {
         match node {
             Document::Comment(c) => self.emit_comment(w, c.as_str()),
-            Document::String(v, _) => self.emit_string(w, v.as_str()),
+            Document::String(v, f) => self.emit_string(w, v.as_str(), *f),
             Document::Boolean(v) => self.emit_boolean(w, *v),
             Document::Int(v) => self.emit_int(w, v),
             Document::Float(v) => self.emit_float(w, *v),
@@ -257,7 +270,15 @@ impl JsonEmitter {
         Ok(())
     }
 
-    fn emit_string<W: fmt::Write>(&mut self, w: &mut W, value: &str) -> Result<()> {
+    fn emit_string<W: fmt::Write>(&mut self, w: &mut W, value: &str, f: StrFormat) -> Result<()> {
+        if self.multiline != Multiline::None && f == StrFormat::Multiline {
+            self.emit_string_multiline(w, value)
+        } else {
+            self.emit_string_strict(w, value)
+        }
+    }
+
+    fn emit_string_strict<W: fmt::Write>(&mut self, w: &mut W, value: &str) -> Result<()> {
         write!(w, "\"")?;
         let bytes = value.as_bytes();
         let mut start = 0;
@@ -271,7 +292,6 @@ impl JsonEmitter {
             }
             match escape {
                 UU => write!(w, "\\u{:04x}", byte)?,
-                NN if self.multiline_strings => writeln!(w, "\\")?,
                 _ => write!(w, "\\{}", byte as char)?,
             };
             start = i + 1;
@@ -280,6 +300,54 @@ impl JsonEmitter {
             write!(w, "{}", &value[start..])?;
         }
         write!(w, "\"")?;
+        Ok(())
+    }
+
+    fn emit_string_multiline<W: fmt::Write>(&mut self, w: &mut W, value: &str) -> Result<()> {
+        if self.multiline == Multiline::Hjson {
+            writeln!(w)?;
+            self.level += 1;
+            self.emit_indent(w)?;
+            writeln!(w, "'''")?;
+            self.emit_indent(w)?;
+        } else {
+            write!(w, "\"")?;
+        }
+        let bytes = value.as_bytes();
+        let mut start = 0;
+        for (i, &byte) in bytes.iter().enumerate() {
+            let escape = ESCAPE[byte as usize];
+            if escape == 0 {
+                continue;
+            }
+            if start < i {
+                write!(w, "{}", &value[start..i])?;
+            }
+            match escape {
+                UU => write!(w, "\\u{:04x}", byte)?,
+                NN => match self.multiline {
+                    Multiline::None => write!(w, "\\{}", byte as char)?,
+                    Multiline::Json5 => writeln!(w, "\\")?,
+                    Multiline::Hjson => {
+                        writeln!(w)?;
+                        self.emit_indent(w)?;
+                    }
+                },
+                _ => write!(w, "\\{}", byte as char)?,
+            };
+            start = i + 1;
+        }
+        if start != bytes.len() {
+            write!(w, "{}", &value[start..])?;
+        }
+        if self.multiline == Multiline::Hjson {
+            writeln!(w)?;
+            self.emit_indent(w)?;
+            write!(w, "'''")?;
+            self.level -= 1;
+        } else {
+            write!(w, "\"")?;
+        }
         Ok(())
     }
 
@@ -317,7 +385,7 @@ impl JsonEmitter {
 
     fn emit_indent<W: fmt::Write>(&mut self, w: &mut W) -> Result<()> {
         if self.compact {
-            return Ok(())
+            return Ok(());
         }
         let mut len = self.level * self.indent;
         while len > 0 {
@@ -483,12 +551,11 @@ mod test {
     }
     fn nes_address(seg: &str, bank: i32, addr: u32) -> Document {
         Document::Compact(
-            Document::Mapping(vec![
-                kv(seg, Document::Sequence(vec![
-                    int(bank),
-                    hex(addr),
-                ]))
-            ]).into()
+            Document::Mapping(vec![kv(
+                seg,
+                Document::Sequence(vec![int(bank), hex(addr)]),
+            )])
+            .into(),
         )
     }
 
@@ -578,7 +645,8 @@ mod test {
             kv("c", hex(15)),
             kv("true", string("foo")),
         ])
-        .to_json5().compact(true);
+        .to_json5()
+        .compact(true);
         assert_eq!(map.to_string(), expect);
     }
 
@@ -638,6 +706,47 @@ No \\n's!",
             kv("backwardsCompatible", string("with JSON")),
         ])
         .to_json5();
+        assert_eq!(map.to_string(), expect);
+    }
+
+    #[test]
+    fn demo_maph() {
+        let expect = r#"{
+  # comments
+  unquoted: "and you can quote me on that",
+  singleQuotes: "not really, though",
+  lineBreaks: 
+    '''
+    Look, Mom!
+    No \\n's!
+    ''',
+  hexadecimal: 912559,
+  "leadingDecimal(not)": 0.8675309,
+  "andTrailing(not)": 8675309,
+  "positiveSign(not)": 1,
+  "trailingComma(not)": [
+    "in objects",
+    "or arrays"
+  ],
+  backwardsCompatible: "with JSON"
+}"#;
+        let map = Document::Mapping(vec![
+            KeyValue(comment("comments"), null()),
+            kv("unquoted", string("and you can quote me on that")),
+            kv("singleQuotes", string("not really, though")),
+            kv("lineBreaks", multistr("Look, Mom!\nNo \\n's!")),
+            kv("hexadecimal", hex(0xdecaf)),
+            kv("leadingDecimal(not)", float(0.8675309)),
+            kv("andTrailing(not)", float(8675309.0)),
+            kv("positiveSign(not)", int(1)),
+            kv(
+                "trailingComma(not)",
+                Document::Sequence(vec![string("in objects"), string("or arrays")]),
+            ),
+            kv("backwardsCompatible", string("with JSON")),
+        ])
+        .to_hjson();
+        println!("{}", map);
         assert_eq!(map.to_string(), expect);
     }
 }
