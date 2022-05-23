@@ -7,12 +7,14 @@ use std::fmt;
 
 type Result<T> = std::result::Result<T, Error>;
 
+/// Comment style to use in JSON documents.
 pub enum Comment {
     None,
     Hash,
     SlashSlash,
 }
 
+/// Multiline string style to use in JSON documents.
 #[derive(Clone, Copy, PartialEq)]
 pub enum Multiline {
     None,
@@ -20,6 +22,7 @@ pub enum Multiline {
     Hjson,
 }
 
+/// A JSON document and its formatting properties.
 pub struct Json {
     document: Document,
     indent: usize,
@@ -33,20 +36,28 @@ pub struct Json {
 }
 
 impl Json {
+    /// Set the amount of indentation for each level of nesting.
     pub fn indent(mut self, i: usize) -> Self {
         self.indent = i;
         self
     }
+    /// Set the comment style to use in the document.
     pub fn comment(mut self, c: Comment) -> Self {
         self.comment = c;
         self
     }
+    /// Set the allowable bases for integers.
+    /// Note: an allowed base that is _not_ allowed for literals will be
+    /// emitted as a quoted string.
     pub fn bases(mut self, b: &[Base]) -> Self {
         for x in b {
             self.bases.insert(*x);
         }
         self
     }
+    /// Set the allowable bases for integer literals.
+    /// Note: bases allowed as literals will be emitted directly into
+    /// the document.
     pub fn literals(mut self, b: &[Base]) -> Self {
         for x in b {
             self.bases.insert(*x);
@@ -54,18 +65,25 @@ impl Json {
         }
         self
     }
+    /// Set whether to obey strict numeric limits on integer values.
+    /// When true, any number larger than 2^53 in magnitude will be
+    /// emitted as a quoted string.
     pub fn strict_numeric_limits(mut self, b: bool) -> Self {
         self.strict_numeric_limits = b;
         self
     }
+    /// Set the style of multiline strings to be used in the document.
     pub fn multiline(mut self, m: Multiline) -> Self {
         self.multiline = m;
         self
     }
+    /// Set whether bare keys in mappings are allowed.
     pub fn bare_keys(mut self, b: bool) -> Self {
         self.bare_keys = b;
         self
     }
+    /// Set whether or not to use compact form.
+    /// Compact form eliminates comments, newlines and indentation.
     pub fn compact(mut self, b: bool) -> Self {
         self.compact = b;
         self
@@ -94,6 +112,7 @@ impl fmt::Display for Json {
 }
 
 impl Document {
+    /// Convert a `Document` to a JSON document.
     pub fn to_json(self) -> Json {
         Json {
             document: self,
@@ -108,6 +127,9 @@ impl Document {
         }
     }
 
+    /// Convert a `Document` to a Json5 document.
+    /// A Json5 document allows `//` comments, hex literals,
+    /// multiline strings and bare keys.
     pub fn to_json5(self) -> Json {
         self.to_json()
             .comment(Comment::SlashSlash)
@@ -116,6 +138,9 @@ impl Document {
             .bare_keys(true)
     }
 
+    /// Convert a `Document` to a Hjson document.
+    /// A Hjson document allows comments, multiline strings and bare keys.
+    /// Defaults to `#` comments, but hjson also supports `//` comments.
     pub fn to_hjson(self) -> Json {
         self.to_json()
             .comment(Comment::Hash)
@@ -124,7 +149,7 @@ impl Document {
     }
 }
 
-pub struct JsonEmitter {
+struct JsonEmitter {
     level: usize,
     indent: usize,
     comment: Option<String>,
@@ -409,6 +434,7 @@ impl JsonEmitter {
     }
 }
 
+// Taken from serde-json:
 const BB: u8 = b'b'; // \x08
 const TT: u8 = b't'; // \x09
 const NN: u8 = b'n'; // \x0A
