@@ -8,5 +8,5 @@ mod yaml;
 
 pub use document::Document;
 pub use json::Json;
-pub use ser::AnnotatedSerializer;
+pub use ser::serialize;
 pub use yaml::Yaml;

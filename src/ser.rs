@@ -1,35 +1,95 @@
 use serde::ser;
 
-use crate::document::{Document, KeyValue, StrFormat};
+use crate::annotate::{Annotate, AnnotateType, Format, MemberId};
+use crate::document::{Comment, CommentFormat, Document, KeyValue, StrFormat};
 use crate::error::Error;
 use crate::integer::{Base, Int};
 
-/// Serializer adapter that adds user-annotatons to the serialized document.
-pub struct AnnotatedSerializer {
-    base: Base,
-    strformat: StrFormat,
+pub fn serialize<T>(value: &T) -> Result<Document, Error>
+where
+    T: ?Sized + ser::Serialize,
+{
+    let mut ser = AnnotatedSerializer::new(AnnotateType::get(value));
+    value.serialize(&mut ser)
 }
 
-impl AnnotatedSerializer {
-    pub fn new() -> Self {
+/// Serializer adapter that adds user-annotatons to the serialized document.
+#[derive(Clone)]
+pub struct AnnotatedSerializer<'a> {
+    annotator: Option<&'a dyn Annotate>,
+    base: Base,
+    strformat: StrFormat,
+    compact: bool,
+}
+
+impl<'a> AnnotatedSerializer<'a> {
+    pub fn new(annotator: Option<&'a dyn Annotate>) -> Self {
         AnnotatedSerializer {
+            annotator: annotator,
             base: Base::Dec,
             strformat: StrFormat::Standard,
+            compact: false,
         }
+    }
+
+    fn with_base(&self, b: Base) -> Self {
+        let mut x = self.clone();
+        x.base = b;
+        x
+    }
+
+    fn with_strformat(&self, s: StrFormat) -> Self {
+        let mut x = self.clone();
+        x.strformat = s;
+        x
+    }
+
+    fn with_compact(&self, c: bool) -> Self {
+        let mut x = self.clone();
+        x.compact = c;
+        x
+    }
+
+    fn annotate(&self, variant: Option<&str>, field: &MemberId) -> Option<Self> {
+        match self.annotator.map(|a| a.format(variant, field)).flatten() {
+            Some(Format::Block) => Some(self.with_strformat(StrFormat::Multiline)),
+            Some(Format::Binary) => Some(self.with_base(Base::Bin)),
+            Some(Format::Decimal) => Some(self.with_base(Base::Dec)),
+            Some(Format::Hex) => Some(self.with_base(Base::Hex)),
+            Some(Format::Octal) => Some(self.with_base(Base::Oct)),
+            Some(Format::Compact) => Some(self.with_compact(true)),
+            None => None,
+        }
+    }
+
+    fn comment(&self, variant: Option<&str>, field: &MemberId) -> Option<Comment> {
+        self.annotator
+            .map(|a| a.comment(variant, field))
+            .flatten()
+            .map(|c| Comment(c, CommentFormat::Normal))
+    }
+
+    fn serialize<T>(&self, value: &T, ser: Option<AnnotatedSerializer>) -> Result<Document, Error>
+    where
+        T: ?Sized + ser::Serialize,
+    {
+        let mut ser = ser.unwrap_or(self.clone());
+        ser.annotator = AnnotateType::get(value);
+        value.serialize(&mut ser)
     }
 }
 
-impl<'s> ser::Serializer for &'s mut AnnotatedSerializer {
+impl<'s, 'a> ser::Serializer for &'s mut AnnotatedSerializer<'a> {
     type Ok = Document;
     type Error = Error;
 
-    type SerializeSeq = SerializeSeq<'s>;
-    type SerializeTuple = SerializeTuple<'s>;
-    type SerializeTupleStruct = SerializeTupleStruct<'s>;
-    type SerializeTupleVariant = SerializeTupleVariant<'s>;
-    type SerializeMap = SerializeMap<'s>;
-    type SerializeStruct = SerializeStruct<'s>;
-    type SerializeStructVariant = SerializeStructVariant<'s>;
+    type SerializeSeq = SerializeSeq<'s, 'a>;
+    type SerializeTuple = SerializeTuple<'s, 'a>;
+    type SerializeTupleStruct = SerializeTupleStruct<'s, 'a>;
+    type SerializeTupleVariant = SerializeTupleVariant<'s, 'a>;
+    type SerializeMap = SerializeMap<'s, 'a>;
+    type SerializeStruct = SerializeStruct<'s, 'a>;
+    type SerializeStructVariant = SerializeStructVariant<'s, 'a>;
 
     fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
         Ok(Document::Boolean(v))
@@ -147,6 +207,7 @@ impl<'s> ser::Serializer for &'s mut AnnotatedSerializer {
         let kv = KeyValue(
             Document::String(variant.to_string(), StrFormat::Standard),
             value.serialize(self)?,
+            None,
         );
         Ok(Document::Mapping(vec![kv]))
     }
@@ -200,13 +261,13 @@ impl<'s> ser::Serializer for &'s mut AnnotatedSerializer {
     }
 }
 
-pub struct SerializeSeq<'s> {
-    serializer: &'s mut AnnotatedSerializer,
+pub struct SerializeSeq<'s, 'a> {
+    serializer: &'s mut AnnotatedSerializer<'a>,
     sequence: Vec<Document>,
 }
 
-impl<'s> SerializeSeq<'s> {
-    fn new(s: &'s mut AnnotatedSerializer) -> Self {
+impl<'s, 'a> SerializeSeq<'s, 'a> {
+    fn new(s: &'s mut AnnotatedSerializer<'a>) -> Self {
         SerializeSeq {
             serializer: s,
             sequence: Vec::new(),
@@ -214,7 +275,7 @@ impl<'s> SerializeSeq<'s> {
     }
 }
 
-impl<'s> ser::SerializeSeq for SerializeSeq<'s> {
+impl<'s, 'a> ser::SerializeSeq for SerializeSeq<'s, 'a> {
     type Ok = Document;
     type Error = Error;
 
@@ -222,7 +283,7 @@ impl<'s> ser::SerializeSeq for SerializeSeq<'s> {
     where
         T: ?Sized + ser::Serialize,
     {
-        self.sequence.push(value.serialize(&mut *self.serializer)?);
+        self.sequence.push(self.serializer.serialize(value, None)?);
         Ok(())
     }
 
@@ -231,13 +292,13 @@ impl<'s> ser::SerializeSeq for SerializeSeq<'s> {
     }
 }
 
-pub struct SerializeTuple<'s> {
-    serializer: &'s mut AnnotatedSerializer,
+pub struct SerializeTuple<'s, 'a> {
+    serializer: &'s mut AnnotatedSerializer<'a>,
     sequence: Vec<Document>,
 }
 
-impl<'s> SerializeTuple<'s> {
-    fn new(s: &'s mut AnnotatedSerializer) -> Self {
+impl<'s, 'a> SerializeTuple<'s, 'a> {
+    fn new(s: &'s mut AnnotatedSerializer<'a>) -> Self {
         SerializeTuple {
             serializer: s,
             sequence: Vec::new(),
@@ -245,7 +306,7 @@ impl<'s> SerializeTuple<'s> {
     }
 }
 
-impl<'s> ser::SerializeTuple for SerializeTuple<'s> {
+impl<'s, 'a> ser::SerializeTuple for SerializeTuple<'s, 'a> {
     type Ok = Document;
     type Error = Error;
 
@@ -253,7 +314,7 @@ impl<'s> ser::SerializeTuple for SerializeTuple<'s> {
     where
         T: ?Sized + ser::Serialize,
     {
-        self.sequence.push(value.serialize(&mut *self.serializer)?);
+        self.sequence.push(self.serializer.serialize(value, None)?);
         Ok(())
     }
 
@@ -262,21 +323,23 @@ impl<'s> ser::SerializeTuple for SerializeTuple<'s> {
     }
 }
 
-pub struct SerializeTupleStruct<'s> {
-    serializer: &'s mut AnnotatedSerializer,
+pub struct SerializeTupleStruct<'s, 'a> {
+    serializer: &'s mut AnnotatedSerializer<'a>,
+    index: u32,
     sequence: Vec<Document>,
 }
 
-impl<'s> SerializeTupleStruct<'s> {
-    fn new(s: &'s mut AnnotatedSerializer) -> Self {
+impl<'s, 'a> SerializeTupleStruct<'s, 'a> {
+    fn new(s: &'s mut AnnotatedSerializer<'a>) -> Self {
         SerializeTupleStruct {
             serializer: s,
+            index: 0,
             sequence: Vec::new(),
         }
     }
 }
 
-impl<'s> ser::SerializeTupleStruct for SerializeTupleStruct<'s> {
+impl<'s, 'a> ser::SerializeTupleStruct for SerializeTupleStruct<'s, 'a> {
     type Ok = Document;
     type Error = Error;
 
@@ -284,7 +347,15 @@ impl<'s> ser::SerializeTupleStruct for SerializeTupleStruct<'s> {
     where
         T: ?Sized + ser::Serialize,
     {
-        self.sequence.push(value.serialize(&mut *self.serializer)?);
+        let field = MemberId::Index(self.index);
+        if let Some(c) = self.serializer.comment(None, &field) {
+            self.sequence.push(Document::Comment(c));
+        }
+        self.sequence.push(
+            self.serializer
+                .serialize(value, self.serializer.annotate(None, &field))?,
+        );
+        self.index += 1;
         Ok(())
     }
 
@@ -293,23 +364,25 @@ impl<'s> ser::SerializeTupleStruct for SerializeTupleStruct<'s> {
     }
 }
 
-pub struct SerializeTupleVariant<'s> {
-    serializer: &'s mut AnnotatedSerializer,
+pub struct SerializeTupleVariant<'s, 'a> {
+    serializer: &'s mut AnnotatedSerializer<'a>,
     variant: &'static str,
+    index: u32,
     sequence: Vec<Document>,
 }
 
-impl<'s> SerializeTupleVariant<'s> {
-    fn new(s: &'s mut AnnotatedSerializer, v: &'static str) -> Self {
+impl<'s, 'a> SerializeTupleVariant<'s, 'a> {
+    fn new(s: &'s mut AnnotatedSerializer<'a>, v: &'static str) -> Self {
         SerializeTupleVariant {
             serializer: s,
             variant: v,
+            index: 0,
             sequence: Vec::new(),
         }
     }
 }
 
-impl<'s> ser::SerializeTupleVariant for SerializeTupleVariant<'s> {
+impl<'s, 'a> ser::SerializeTupleVariant for SerializeTupleVariant<'s, 'a> {
     type Ok = Document;
     type Error = Error;
 
@@ -317,26 +390,37 @@ impl<'s> ser::SerializeTupleVariant for SerializeTupleVariant<'s> {
     where
         T: ?Sized + ser::Serialize,
     {
-        self.sequence.push(value.serialize(&mut *self.serializer)?);
+        let field = MemberId::Index(self.index);
+        if let Some(c) = self.serializer.comment(None, &field) {
+            self.sequence.push(Document::Comment(c));
+        }
+        self.sequence.push(
+            self.serializer
+                .serialize(value, self.serializer.annotate(None, &field))?,
+        );
+
+        self.index += 1;
         Ok(())
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
+        // FIXME: deal with `compact` here.
         Ok(Document::Mapping(vec![KeyValue(
             Document::String(self.variant.to_string(), StrFormat::Standard),
             Document::Sequence(self.sequence),
+            None,
         )]))
     }
 }
 
-pub struct SerializeMap<'s> {
-    serializer: &'s mut AnnotatedSerializer,
+pub struct SerializeMap<'s, 'a> {
+    serializer: &'s mut AnnotatedSerializer<'a>,
     next_key: Option<Document>,
     mapping: Vec<KeyValue>,
 }
 
-impl<'s> SerializeMap<'s> {
-    fn new(s: &'s mut AnnotatedSerializer) -> Self {
+impl<'s, 'a> SerializeMap<'s, 'a> {
+    fn new(s: &'s mut AnnotatedSerializer<'a>) -> Self {
         SerializeMap {
             serializer: s,
             next_key: None,
@@ -345,7 +429,7 @@ impl<'s> SerializeMap<'s> {
     }
 }
 
-impl<'s> ser::SerializeMap for SerializeMap<'s> {
+impl<'s, 'a> ser::SerializeMap for SerializeMap<'s, 'a> {
     type Ok = Document;
     type Error = Error;
 
@@ -366,9 +450,10 @@ impl<'s> ser::SerializeMap for SerializeMap<'s> {
         T: ?Sized + ser::Serialize,
     {
         match self.next_key.take() {
-            Some(key) => self
-                .mapping
-                .push(KeyValue(key, value.serialize(&mut *self.serializer)?)),
+            Some(key) => {
+                self.mapping
+                    .push(KeyValue(key, self.serializer.serialize(value, None)?, None))
+            }
             None => panic!("serialize_value called before serialize_key"),
         };
         Ok(())
@@ -381,19 +466,20 @@ impl<'s> ser::SerializeMap for SerializeMap<'s> {
     {
         self.mapping.push(KeyValue(
             key.serialize(&mut *self.serializer)?,
-            value.serialize(&mut *self.serializer)?,
+            self.serializer.serialize(value, None)?,
+            None,
         ));
         Ok(())
     }
 }
 
-pub struct SerializeStruct<'s> {
-    serializer: &'s mut AnnotatedSerializer,
+pub struct SerializeStruct<'s, 'a> {
+    serializer: &'s mut AnnotatedSerializer<'a>,
     mapping: Vec<KeyValue>,
 }
 
-impl<'s> SerializeStruct<'s> {
-    fn new(s: &'s mut AnnotatedSerializer) -> Self {
+impl<'s, 'a> SerializeStruct<'s, 'a> {
+    fn new(s: &'s mut AnnotatedSerializer<'a>) -> Self {
         SerializeStruct {
             serializer: s,
             mapping: Vec::new(),
@@ -401,7 +487,7 @@ impl<'s> SerializeStruct<'s> {
     }
 }
 
-impl<'s> ser::SerializeStruct for SerializeStruct<'s> {
+impl<'s, 'a> ser::SerializeStruct for SerializeStruct<'s, 'a> {
     type Ok = Document;
     type Error = Error;
 
@@ -413,22 +499,25 @@ impl<'s> ser::SerializeStruct for SerializeStruct<'s> {
     where
         T: ?Sized + ser::Serialize,
     {
+        let field = MemberId::Name(key);
         self.mapping.push(KeyValue(
             Document::String(key.to_string(), StrFormat::Standard),
-            value.serialize(&mut *self.serializer)?,
+            self.serializer
+                .serialize(value, self.serializer.annotate(None, &field))?,
+            self.serializer.comment(None, &field),
         ));
         Ok(())
     }
 }
 
-pub struct SerializeStructVariant<'s> {
-    serializer: &'s mut AnnotatedSerializer,
+pub struct SerializeStructVariant<'s, 'a> {
+    serializer: &'s mut AnnotatedSerializer<'a>,
     variant: &'static str,
     mapping: Vec<KeyValue>,
 }
 
-impl<'s> SerializeStructVariant<'s> {
-    fn new(s: &'s mut AnnotatedSerializer, v: &'static str) -> Self {
+impl<'s, 'a> SerializeStructVariant<'s, 'a> {
+    fn new(s: &'s mut AnnotatedSerializer<'a>, v: &'static str) -> Self {
         SerializeStructVariant {
             serializer: s,
             variant: v,
@@ -437,7 +526,7 @@ impl<'s> SerializeStructVariant<'s> {
     }
 }
 
-impl<'s> ser::SerializeStructVariant for SerializeStructVariant<'s> {
+impl<'s, 'a> ser::SerializeStructVariant for SerializeStructVariant<'s, 'a> {
     type Ok = Document;
     type Error = Error;
 
@@ -445,6 +534,7 @@ impl<'s> ser::SerializeStructVariant for SerializeStructVariant<'s> {
         Ok(Document::Mapping(vec![KeyValue(
             Document::String(self.variant.to_string(), StrFormat::Standard),
             Document::Mapping(self.mapping),
+            None,
         )]))
     }
 
@@ -452,9 +542,12 @@ impl<'s> ser::SerializeStructVariant for SerializeStructVariant<'s> {
     where
         T: ?Sized + ser::Serialize,
     {
+        let field = MemberId::Name(key);
         self.mapping.push(KeyValue(
             Document::String(key.to_string(), StrFormat::Standard),
-            value.serialize(&mut *self.serializer)?,
+            self.serializer
+                .serialize(value, self.serializer.annotate(None, &field))?,
+            self.serializer.comment(None, &field),
         ));
         Ok(())
     }
