@@ -7,6 +7,6 @@ mod ser;
 mod yaml;
 
 pub use document::Document;
-pub use ser::AnnotatedSerializer;
 pub use json::Json;
+pub use ser::AnnotatedSerializer;
 pub use yaml::Yaml;
