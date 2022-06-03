@@ -14,13 +14,21 @@ pub enum StrFormat {
     Multiline,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum CommentFormat {
+    Normal,
+}
+
 #[derive(Clone, Debug)]
-pub struct KeyValue(pub Document, pub Document);
+pub struct Comment(pub String, pub CommentFormat);
+
+#[derive(Clone, Debug)]
+pub struct KeyValue(pub Document, pub Document, pub Option<Comment>);
 
 #[derive(Clone, Debug)]
 pub enum Document {
     // A comment (emitted for humans, ignored by parsers).
-    Comment(String),
+    Comment(Comment),
     // A string value and its preferred formatting.
     String(String, StrFormat),
     // A boolean value.

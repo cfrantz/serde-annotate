@@ -1,3 +1,4 @@
+use crate::document::Comment as DocComment;
 use crate::document::{Document, KeyValue, StrFormat};
 use crate::error::Error;
 use crate::integer::{Base, Int};
@@ -180,7 +181,7 @@ impl Default for JsonEmitter {
 impl JsonEmitter {
     fn emit_node<W: fmt::Write>(&mut self, w: &mut W, node: &Document) -> Result<()> {
         match node {
-            Document::Comment(c) => self.emit_comment(w, c.as_str()),
+            Document::Comment(c) => self.emit_comment(w, c),
             Document::String(v, f) => self.emit_string(w, v.as_str(), *f),
             Document::Boolean(v) => self.emit_boolean(w, *v),
             Document::Int(v) => self.emit_int(w, v),
@@ -241,19 +242,15 @@ impl JsonEmitter {
         self.level += 1;
         self.writeln(w, "{")?;
         self.emit_indent(w)?;
-        let mut comments = 0;
-        for (i, KeyValue(key, value)) in mapping.iter().enumerate() {
-            if i - comments > 0 {
+        for (i, KeyValue(key, value, comment)) in mapping.iter().enumerate() {
+            if i > 0 {
                 self.writeln(w, ",")?;
                 self.emit_indent(w)?;
             }
+            if let Some(c) = comment {
+                self.emit_comment(w, c)?;
+            }
             match key {
-                Document::Comment(c) => {
-                    // If the key is a comment, there's no useful value
-                    self.emit_comment(w, c.as_str())?;
-                    comments += 1;
-                    continue;
-                }
                 Document::String(s, _) => {
                     if self.bare_keys && is_legal_bareword(s.as_str()) {
                         write!(w, "{}", s)?
@@ -264,6 +261,7 @@ impl JsonEmitter {
                 Document::Boolean(v) => write!(w, "\"{}\"", v)?,
                 Document::Int(v) => write!(w, "\"{}\"", v)?,
                 Document::Float(v) => write!(w, "\"{}\"", v)?,
+                Document::Comment(_) => return Err(Error::KeyTypeError("comment")),
                 Document::Mapping(_) => return Err(Error::KeyTypeError("mapping")),
                 Document::Sequence(_) => return Err(Error::KeyTypeError("sequence")),
                 Document::Bytes(_) => return Err(Error::KeyTypeError("bytes")),
@@ -280,10 +278,11 @@ impl JsonEmitter {
         Ok(())
     }
 
-    fn emit_comment<W: fmt::Write>(&mut self, w: &mut W, comment: &str) -> Result<()> {
+    fn emit_comment<W: fmt::Write>(&mut self, w: &mut W, comment: &DocComment) -> Result<()> {
         if self.comment.is_none() || self.compact {
             return Ok(());
         }
+        let DocComment(comment, _formant) = comment;
         for line in comment.split('\n') {
             if line.is_empty() {
                 writeln!(w, "{}", self.comment.as_ref().unwrap())?;
@@ -547,6 +546,7 @@ fn is_legal_bareword(word: &str) -> bool {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::document::CommentFormat;
 
     fn int(v: i32) -> Document {
         Document::Int(Int::new(v, Base::Dec))
@@ -570,10 +570,17 @@ mod test {
         Document::String(v.to_string(), StrFormat::Multiline)
     }
     fn comment(v: &str) -> Document {
-        Document::Comment(v.to_string())
+        Document::Comment(DocComment(v.to_string(), CommentFormat::Normal))
     }
     fn kv(k: &str, v: Document) -> KeyValue {
-        KeyValue(string(k), v)
+        KeyValue(string(k), v, None)
+    }
+    fn kvcomment(k: &str, v: Document, c: &str) -> KeyValue {
+        KeyValue(
+            string(k),
+            v,
+            Some(DocComment(c.to_string(), CommentFormat::Normal)),
+        )
     }
     fn nes_address(seg: &str, bank: i32, addr: u32) -> Document {
         Document::Compact(
@@ -717,8 +724,11 @@ No \\n's!",
   backwardsCompatible: "with JSON"
 }"#;
         let map = Document::Mapping(vec![
-            KeyValue(comment("comments"), null()),
-            kv("unquoted", string("and you can quote me on that")),
+            kvcomment(
+                "unquoted",
+                string("and you can quote me on that"),
+                "comments",
+            ),
             kv("singleQuotes", string("not really, though")),
             kv("lineBreaks", multistr("Look, Mom! \nNo \\n's!")),
             kv("hexadecimal", hex(0xdecaf)),
@@ -757,8 +767,11 @@ No \\n's!",
   backwardsCompatible: "with JSON"
 }"#;
         let map = Document::Mapping(vec![
-            KeyValue(comment("comments"), null()),
-            kv("unquoted", string("and you can quote me on that")),
+            kvcomment(
+                "unquoted",
+                string("and you can quote me on that"),
+                "comments",
+            ),
             kv("singleQuotes", string("not really, though")),
             kv("lineBreaks", multistr("Look, Mom!\nNo \\n's!")),
             kv("hexadecimal", hex(0xdecaf)),

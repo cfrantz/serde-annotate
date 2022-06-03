@@ -1,4 +1,4 @@
-use crate::document::{Document, KeyValue, StrFormat};
+use crate::document::{Comment, Document, KeyValue, StrFormat};
 use crate::error::Error;
 use crate::integer::Int;
 use std::fmt;
@@ -25,7 +25,6 @@ impl Yaml {
         self.header = b;
         self
     }
-
 }
 
 impl fmt::Display for Yaml {
@@ -72,7 +71,7 @@ impl Default for YamlEmitter {
 impl YamlEmitter {
     fn emit_node<W: fmt::Write>(&mut self, w: &mut W, node: &Document) -> Result<()> {
         match node {
-            Document::Comment(c) => self.emit_comment(w, c.as_str()),
+            Document::Comment(c) => self.emit_comment(w, c),
             Document::String(v, f) => self.emit_string(w, v.as_str(), *f),
             Document::Boolean(v) => self.emit_boolean(w, *v),
             Document::Int(v) => self.emit_int(w, v),
@@ -97,7 +96,9 @@ impl YamlEmitter {
         self.writeln(w, "[")?;
         self.emit_indent(w)?;
         for (i, chunk) in bytes.chunks(16).enumerate() {
-            if i>0 { self.writeln(w, "")?; }
+            if i > 0 {
+                self.writeln(w, "")?;
+            }
             for b in chunk {
                 write!(w, "0x{:02X},", b)?;
             }
@@ -107,8 +108,12 @@ impl YamlEmitter {
         Ok(())
     }
 
-
-    fn emit_helper<W: fmt::Write>(&mut self, w: &mut W, prefix: &str, value: &Document) -> Result<()> {
+    fn emit_helper<W: fmt::Write>(
+        &mut self,
+        w: &mut W,
+        prefix: &str,
+        value: &Document,
+    ) -> Result<()> {
         match value {
             Document::Sequence(v) => {
                 if self.compact || v.is_empty() {
@@ -117,7 +122,7 @@ impl YamlEmitter {
                     writeln!(w, "{}", prefix)?;
                     self.emit_indent_extra(w, 1)?
                 }
-            },
+            }
             Document::Mapping(v) => {
                 if self.compact || v.is_empty() {
                     write!(w, "{} ", prefix)?;
@@ -125,7 +130,7 @@ impl YamlEmitter {
                     writeln!(w, "{}", prefix)?;
                     self.emit_indent_extra(w, 1)?
                 }
-            },
+            }
             _ => write!(w, "{} ", prefix)?,
         };
         self.emit_node(w, value)
@@ -135,14 +140,19 @@ impl YamlEmitter {
         if self.compact || sequence.is_empty() {
             write!(w, "[")?;
             for (i, v) in sequence.iter().enumerate() {
-                if i>0 { write!(w, ", ")?; }
+                if i > 0 {
+                    write!(w, ", ")?;
+                }
                 self.emit_node(w, v)?;
             }
             write!(w, "]")?;
         } else {
             self.level += 1;
             for (i, v) in sequence.iter().enumerate() {
-                if i>0 { writeln!(w)?; self.emit_indent(w)? }
+                if i > 0 {
+                    writeln!(w)?;
+                    self.emit_indent(w)?
+                }
                 self.emit_helper(w, "-", v)?;
             }
             self.level -= 1;
@@ -157,18 +167,17 @@ impl YamlEmitter {
             self.level += 1;
         }
         let mut skip = true;
-        for KeyValue(key, value) in mapping.iter() {
+        for KeyValue(key, value, comment) in mapping.iter() {
             if !skip {
                 if self.compact {
                     write!(w, ", ")?;
                 } else {
-                    writeln!(w)?; self.emit_indent(w)?;
+                    writeln!(w)?;
+                    self.emit_indent(w)?;
                 }
             }
-            if let Document::Comment(c) = &key {
-                self.emit_comment(w, c.as_str())?;
-                skip = true;
-                continue;
+            if let Some(c) = &comment {
+                self.emit_comment(w, c)?;
             }
             self.emit_node(w, &key)?;
             self.emit_helper(w, ":", value)?;
@@ -182,16 +191,17 @@ impl YamlEmitter {
         Ok(())
     }
 
-    fn emit_comment<W: fmt::Write>(&mut self, w: &mut W, comment: &str) -> Result<()> {
+    fn emit_comment<W: fmt::Write>(&mut self, w: &mut W, comment: &Comment) -> Result<()> {
         if !self.compact {
-        for line in comment.split('\n') {
-            if line.is_empty() {
-                writeln!(w, "#")?;
-            } else {
-                writeln!(w, "# {}", line)?;
+            let Comment(comment, _format) = comment;
+            for line in comment.split('\n') {
+                if line.is_empty() {
+                    writeln!(w, "#")?;
+                } else {
+                    writeln!(w, "# {}", line)?;
+                }
+                self.emit_indent(w)?;
             }
-            self.emit_indent(w)?;
-        }
         }
         Ok(())
     }
@@ -208,7 +218,7 @@ impl YamlEmitter {
     fn emit_string_multiline<W: fmt::Write>(&mut self, w: &mut W, mut value: &str) -> Result<()> {
         if value.ends_with('\n') {
             write!(w, "|+")?;
-            value = &value[..value.len()-1];
+            value = &value[..value.len() - 1];
         } else {
             write!(w, "|-")?;
         }
@@ -279,7 +289,11 @@ impl YamlEmitter {
 
 const SPACE: &str = "                                                                                                    ";
 // From yaml-rust:
-fn escape_str<W: fmt::Write>(wr: &mut W, v: &str, quoted: bool) -> std::result::Result<(), fmt::Error> {
+fn escape_str<W: fmt::Write>(
+    wr: &mut W,
+    v: &str,
+    quoted: bool,
+) -> std::result::Result<(), fmt::Error> {
     if quoted {
         wr.write_str("\"")?;
     }
@@ -404,10 +418,10 @@ fn need_quotes(string: &str) -> bool {
         || string.parse::<f64>().is_ok()
 }
 
-
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::document::CommentFormat;
     use crate::integer::Base;
 
     fn int(v: i32) -> Document {
@@ -432,10 +446,17 @@ mod test {
         Document::String(v.to_string(), StrFormat::Multiline)
     }
     fn comment(v: &str) -> Document {
-        Document::Comment(v.to_string())
+        Document::Comment(Comment(v.to_string(), CommentFormat::Normal))
     }
     fn kv(k: &str, v: Document) -> KeyValue {
-        KeyValue(string(k), v)
+        KeyValue(string(k), v, None)
+    }
+    fn kvcomment(k: &str, v: Document, c: &str) -> KeyValue {
+        KeyValue(
+            string(k),
+            v,
+            Some(Comment(c.to_string(), CommentFormat::Normal)),
+        )
     }
     fn nes_address(seg: &str, bank: i32, addr: u32) -> Document {
         Document::Compact(
@@ -566,13 +587,15 @@ trailingComma(not):
   - or arrays
 backwardsCompatible: with JSON"#;
         let map = Document::Mapping(vec![
-            KeyValue(comment("comments"), null()),
-            kv("unquoted", string("and you can quote me on that")),
+            kvcomment(
+                "unquoted",
+                string("and you can quote me on that"),
+                "comments",
+            ),
             kv("singleQuotes", string("not really, though")),
             kv("lineBreaks", multistr("Look, Mom!\nNo \\n's!")),
             kv("hexadecimal", hex(0xdecaf)),
-            KeyValue(comment("more comments"), null()),
-            kv("leadingDecimal(not)", float(0.8675309)),
+            kvcomment("leadingDecimal(not)", float(0.8675309), "more comments"),
             kv("andTrailing(not)", float(8675309.0)),
             kv("positiveSign(not)", int(1)),
             kv(
