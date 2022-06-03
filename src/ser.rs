@@ -19,17 +19,17 @@ impl AnnotatedSerializer {
     }
 }
 
-impl<'a> ser::Serializer for &'a mut AnnotatedSerializer {
+impl<'s> ser::Serializer for &'s mut AnnotatedSerializer {
     type Ok = Document;
     type Error = Error;
 
-    type SerializeSeq = SerializeSeq<'a>;
-    type SerializeTuple = SerializeTuple<'a>;
-    type SerializeTupleStruct = SerializeTupleStruct<'a>;
-    type SerializeTupleVariant = SerializeTupleVariant<'a>;
-    type SerializeMap = SerializeMap<'a>;
-    type SerializeStruct = SerializeStruct<'a>;
-    type SerializeStructVariant = SerializeStructVariant<'a>;
+    type SerializeSeq = SerializeSeq<'s>;
+    type SerializeTuple = SerializeTuple<'s>;
+    type SerializeTupleStruct = SerializeTupleStruct<'s>;
+    type SerializeTupleVariant = SerializeTupleVariant<'s>;
+    type SerializeMap = SerializeMap<'s>;
+    type SerializeStruct = SerializeStruct<'s>;
+    type SerializeStructVariant = SerializeStructVariant<'s>;
 
     fn serialize_bool(self, v: bool) -> Result<Self::Ok, Self::Error> {
         Ok(Document::Boolean(v))
@@ -200,13 +200,13 @@ impl<'a> ser::Serializer for &'a mut AnnotatedSerializer {
     }
 }
 
-pub struct SerializeSeq<'a> {
-    serializer: &'a mut AnnotatedSerializer,
+pub struct SerializeSeq<'s> {
+    serializer: &'s mut AnnotatedSerializer,
     sequence: Vec<Document>,
 }
 
-impl<'a> SerializeSeq<'a> {
-    fn new(s: &'a mut AnnotatedSerializer) -> Self {
+impl<'s> SerializeSeq<'s> {
+    fn new(s: &'s mut AnnotatedSerializer) -> Self {
         SerializeSeq {
             serializer: s,
             sequence: Vec::new(),
@@ -214,7 +214,7 @@ impl<'a> SerializeSeq<'a> {
     }
 }
 
-impl<'a> ser::SerializeSeq for SerializeSeq<'a> {
+impl<'s> ser::SerializeSeq for SerializeSeq<'s> {
     type Ok = Document;
     type Error = Error;
 
@@ -231,13 +231,13 @@ impl<'a> ser::SerializeSeq for SerializeSeq<'a> {
     }
 }
 
-pub struct SerializeTuple<'a> {
-    serializer: &'a mut AnnotatedSerializer,
+pub struct SerializeTuple<'s> {
+    serializer: &'s mut AnnotatedSerializer,
     sequence: Vec<Document>,
 }
 
-impl<'a> SerializeTuple<'a> {
-    fn new(s: &'a mut AnnotatedSerializer) -> Self {
+impl<'s> SerializeTuple<'s> {
+    fn new(s: &'s mut AnnotatedSerializer) -> Self {
         SerializeTuple {
             serializer: s,
             sequence: Vec::new(),
@@ -245,7 +245,7 @@ impl<'a> SerializeTuple<'a> {
     }
 }
 
-impl<'a> ser::SerializeTuple for SerializeTuple<'a> {
+impl<'s> ser::SerializeTuple for SerializeTuple<'s> {
     type Ok = Document;
     type Error = Error;
 
@@ -262,13 +262,13 @@ impl<'a> ser::SerializeTuple for SerializeTuple<'a> {
     }
 }
 
-pub struct SerializeTupleStruct<'a> {
-    serializer: &'a mut AnnotatedSerializer,
+pub struct SerializeTupleStruct<'s> {
+    serializer: &'s mut AnnotatedSerializer,
     sequence: Vec<Document>,
 }
 
-impl<'a> SerializeTupleStruct<'a> {
-    fn new(s: &'a mut AnnotatedSerializer) -> Self {
+impl<'s> SerializeTupleStruct<'s> {
+    fn new(s: &'s mut AnnotatedSerializer) -> Self {
         SerializeTupleStruct {
             serializer: s,
             sequence: Vec::new(),
@@ -276,7 +276,7 @@ impl<'a> SerializeTupleStruct<'a> {
     }
 }
 
-impl<'a> ser::SerializeTupleStruct for SerializeTupleStruct<'a> {
+impl<'s> ser::SerializeTupleStruct for SerializeTupleStruct<'s> {
     type Ok = Document;
     type Error = Error;
 
@@ -293,14 +293,14 @@ impl<'a> ser::SerializeTupleStruct for SerializeTupleStruct<'a> {
     }
 }
 
-pub struct SerializeTupleVariant<'a> {
-    serializer: &'a mut AnnotatedSerializer,
+pub struct SerializeTupleVariant<'s> {
+    serializer: &'s mut AnnotatedSerializer,
     variant: &'static str,
     sequence: Vec<Document>,
 }
 
-impl<'a> SerializeTupleVariant<'a> {
-    fn new(s: &'a mut AnnotatedSerializer, v: &'static str) -> Self {
+impl<'s> SerializeTupleVariant<'s> {
+    fn new(s: &'s mut AnnotatedSerializer, v: &'static str) -> Self {
         SerializeTupleVariant {
             serializer: s,
             variant: v,
@@ -309,7 +309,7 @@ impl<'a> SerializeTupleVariant<'a> {
     }
 }
 
-impl<'a> ser::SerializeTupleVariant for SerializeTupleVariant<'a> {
+impl<'s> ser::SerializeTupleVariant for SerializeTupleVariant<'s> {
     type Ok = Document;
     type Error = Error;
 
@@ -329,14 +329,14 @@ impl<'a> ser::SerializeTupleVariant for SerializeTupleVariant<'a> {
     }
 }
 
-pub struct SerializeMap<'a> {
-    serializer: &'a mut AnnotatedSerializer,
+pub struct SerializeMap<'s> {
+    serializer: &'s mut AnnotatedSerializer,
     next_key: Option<Document>,
     mapping: Vec<KeyValue>,
 }
 
-impl<'a> SerializeMap<'a> {
-    fn new(s: &'a mut AnnotatedSerializer) -> Self {
+impl<'s> SerializeMap<'s> {
+    fn new(s: &'s mut AnnotatedSerializer) -> Self {
         SerializeMap {
             serializer: s,
             next_key: None,
@@ -345,7 +345,7 @@ impl<'a> SerializeMap<'a> {
     }
 }
 
-impl<'a> ser::SerializeMap for SerializeMap<'a> {
+impl<'s> ser::SerializeMap for SerializeMap<'s> {
     type Ok = Document;
     type Error = Error;
 
@@ -387,13 +387,13 @@ impl<'a> ser::SerializeMap for SerializeMap<'a> {
     }
 }
 
-pub struct SerializeStruct<'a> {
-    serializer: &'a mut AnnotatedSerializer,
+pub struct SerializeStruct<'s> {
+    serializer: &'s mut AnnotatedSerializer,
     mapping: Vec<KeyValue>,
 }
 
-impl<'a> SerializeStruct<'a> {
-    fn new(s: &'a mut AnnotatedSerializer) -> Self {
+impl<'s> SerializeStruct<'s> {
+    fn new(s: &'s mut AnnotatedSerializer) -> Self {
         SerializeStruct {
             serializer: s,
             mapping: Vec::new(),
@@ -401,7 +401,7 @@ impl<'a> SerializeStruct<'a> {
     }
 }
 
-impl<'a> ser::SerializeStruct for SerializeStruct<'a> {
+impl<'s> ser::SerializeStruct for SerializeStruct<'s> {
     type Ok = Document;
     type Error = Error;
 
@@ -421,14 +421,14 @@ impl<'a> ser::SerializeStruct for SerializeStruct<'a> {
     }
 }
 
-pub struct SerializeStructVariant<'a> {
-    serializer: &'a mut AnnotatedSerializer,
+pub struct SerializeStructVariant<'s> {
+    serializer: &'s mut AnnotatedSerializer,
     variant: &'static str,
     mapping: Vec<KeyValue>,
 }
 
-impl<'a> SerializeStructVariant<'a> {
-    fn new(s: &'a mut AnnotatedSerializer, v: &'static str) -> Self {
+impl<'s> SerializeStructVariant<'s> {
+    fn new(s: &'s mut AnnotatedSerializer, v: &'static str) -> Self {
         SerializeStructVariant {
             serializer: s,
             variant: v,
@@ -437,7 +437,7 @@ impl<'a> SerializeStructVariant<'a> {
     }
 }
 
-impl<'a> ser::SerializeStructVariant for SerializeStructVariant<'a> {
+impl<'s> ser::SerializeStructVariant for SerializeStructVariant<'s> {
     type Ok = Document;
     type Error = Error;
 
