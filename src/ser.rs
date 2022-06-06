@@ -204,12 +204,20 @@ impl<'s, 'a> ser::Serializer for &'s mut AnnotatedSerializer<'a> {
     where
         T: ?Sized + ser::Serialize,
     {
-        let kv = KeyValue(
+        let a = self.annotate(Some(variant), &MemberId::Variant);
+        let compact = a.map(|a| a.compact).unwrap_or(false);
+        let v = self.serialize(value, self.annotate(Some(variant), &MemberId::Index(0)))?;
+        let v = if compact {
+            Document::Compact(v.into())
+        } else {
+            v
+        };
+
+        Ok(Document::Mapping(vec![KeyValue(
             Document::String(variant.to_string(), StrFormat::Standard),
-            value.serialize(self)?,
-            None,
-        );
-        Ok(Document::Mapping(vec![kv]))
+            v,
+            self.comment(Some(variant), &MemberId::Variant),
+        )]))
     }
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
@@ -391,12 +399,12 @@ impl<'s, 'a> ser::SerializeTupleVariant for SerializeTupleVariant<'s, 'a> {
         T: ?Sized + ser::Serialize,
     {
         let field = MemberId::Index(self.index);
-        if let Some(c) = self.serializer.comment(None, &field) {
+        if let Some(c) = self.serializer.comment(Some(self.variant), &field) {
             self.sequence.push(Document::Comment(c));
         }
         self.sequence.push(
             self.serializer
-                .serialize(value, self.serializer.annotate(None, &field))?,
+                .serialize(value, self.serializer.annotate(Some(self.variant), &field))?,
         );
 
         self.index += 1;
@@ -404,11 +412,20 @@ impl<'s, 'a> ser::SerializeTupleVariant for SerializeTupleVariant<'s, 'a> {
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        // FIXME: deal with `compact` here.
+        let a = self
+            .serializer
+            .annotate(Some(self.variant), &MemberId::Variant);
+        let compact = a.map(|a| a.compact).unwrap_or(false);
+        let sequence = if compact {
+            Document::Compact(Document::Sequence(self.sequence).into())
+        } else {
+            Document::Sequence(self.sequence)
+        };
         Ok(Document::Mapping(vec![KeyValue(
             Document::String(self.variant.to_string(), StrFormat::Standard),
-            Document::Sequence(self.sequence),
-            None,
+            sequence,
+            self.serializer
+                .comment(Some(self.variant), &MemberId::Variant),
         )]))
     }
 }
@@ -531,10 +548,20 @@ impl<'s, 'a> ser::SerializeStructVariant for SerializeStructVariant<'s, 'a> {
     type Error = Error;
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
+        let a = self
+            .serializer
+            .annotate(Some(self.variant), &MemberId::Variant);
+        let compact = a.map(|a| a.compact).unwrap_or(false);
+        let mapping = if compact {
+            Document::Compact(Document::Mapping(self.mapping).into())
+        } else {
+            Document::Mapping(self.mapping)
+        };
         Ok(Document::Mapping(vec![KeyValue(
             Document::String(self.variant.to_string(), StrFormat::Standard),
-            Document::Mapping(self.mapping),
-            None,
+            mapping,
+            self.serializer
+                .comment(Some(self.variant), &MemberId::Variant),
         )]))
     }
 
