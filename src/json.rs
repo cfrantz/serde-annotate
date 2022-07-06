@@ -1,3 +1,4 @@
+use crate::color::ColorProfile;
 use crate::document::Comment as DocComment;
 use crate::document::{Document, KeyValue, StrFormat};
 use crate::error::Error;
@@ -27,6 +28,7 @@ pub enum Multiline {
 pub struct Json {
     document: Document,
     indent: usize,
+    color: ColorProfile,
     comment: Comment,
     bases: HashSet<Base>,
     literals: HashSet<Base>,
@@ -89,6 +91,11 @@ impl Json {
         self.compact = b;
         self
     }
+
+    pub fn color(mut self, c: ColorProfile) -> Self {
+        self.color = c;
+        self
+    }
 }
 
 impl fmt::Display for Json {
@@ -96,6 +103,7 @@ impl fmt::Display for Json {
         let mut emitter = JsonEmitter {
             level: 0,
             indent: self.indent,
+            color: self.color,
             comment: match self.comment {
                 Comment::None => None,
                 Comment::Hash => Some("#".to_string()),
@@ -118,6 +126,7 @@ impl Document {
         Json {
             document: self,
             indent: 2,
+            color: ColorProfile::default(),
             comment: Comment::None,
             bases: HashSet::from([Base::Dec]),
             literals: HashSet::from([Base::Dec]),
@@ -153,6 +162,7 @@ impl Document {
 struct JsonEmitter {
     level: usize,
     indent: usize,
+    color: ColorProfile,
     comment: Option<String>,
     bases: HashSet<Base>,
     literals: HashSet<Base>,
@@ -168,6 +178,7 @@ impl Default for JsonEmitter {
             level: 0,
             indent: 2,
             comment: None,
+            color: ColorProfile::default(),
             bases: HashSet::new(),
             literals: HashSet::new(),
             strict_numeric_limits: true,
@@ -204,7 +215,7 @@ impl JsonEmitter {
 
     fn emit_bytes<W: fmt::Write>(&mut self, w: &mut W, bytes: &[u8]) -> Result<()> {
         self.level += 1;
-        self.writeln(w, "[")?;
+        self.writeln(w, &self.color.aggregate.paint("[").to_string())?;
         self.emit_indent(w)?;
         for (i, value) in bytes.iter().enumerate() {
             if i > 0 {
@@ -216,13 +227,13 @@ impl JsonEmitter {
         self.writeln(w, "")?;
         self.level -= 1;
         self.emit_indent(w)?;
-        write!(w, "]")?;
+        write!(w, "{}", &self.color.aggregate.paint("]"))?;
         Ok(())
     }
 
     fn emit_sequence<W: fmt::Write>(&mut self, w: &mut W, sequence: &[Document]) -> Result<()> {
         self.level += 1;
-        self.writeln(w, "[")?;
+        self.writeln(w, &self.color.aggregate.paint("[").to_string())?;
         self.emit_indent(w)?;
         for (i, value) in sequence.iter().enumerate() {
             if i > 0 {
@@ -234,13 +245,13 @@ impl JsonEmitter {
         self.writeln(w, "")?;
         self.level -= 1;
         self.emit_indent(w)?;
-        write!(w, "]")?;
+        write!(w, "{}", &self.color.aggregate.paint("]"))?;
         Ok(())
     }
 
     fn emit_mapping<W: fmt::Write>(&mut self, w: &mut W, mapping: &[KeyValue]) -> Result<()> {
         self.level += 1;
-        self.writeln(w, "{")?;
+        self.writeln(w, &self.color.aggregate.paint("{").to_string())?;
         self.emit_indent(w)?;
         for (i, KeyValue(key, value, comment)) in mapping.iter().enumerate() {
             if i > 0 {
@@ -253,14 +264,38 @@ impl JsonEmitter {
             match key {
                 Document::String(s, _) => {
                     if self.bare_keys && is_legal_bareword(s.as_str()) {
-                        write!(w, "{}", s)?
+                        write!(w, "{}", self.color.key.paint(s))?
                     } else {
-                        write!(w, "\"{}\"", s)?
+                        write!(
+                            w,
+                            "{}{}{}",
+                            self.color.punctuation.paint("\""),
+                            self.color.key.paint(s),
+                            self.color.punctuation.paint("\"")
+                        )?
                     }
                 }
-                Document::Boolean(v) => write!(w, "\"{}\"", v)?,
-                Document::Int(v) => write!(w, "\"{}\"", v)?,
-                Document::Float(v) => write!(w, "\"{}\"", v)?,
+                Document::Boolean(v) => write!(
+                    w,
+                    "{}{}{}",
+                    self.color.punctuation.paint("\""),
+                    self.color.key.paint(format!("{}", v)),
+                    self.color.punctuation.paint("\"")
+                )?,
+                Document::Int(v) => write!(
+                    w,
+                    "{}{}{}",
+                    self.color.punctuation.paint("\""),
+                    self.color.key.paint(format!("{}", v)),
+                    self.color.punctuation.paint("\"")
+                )?,
+                Document::Float(v) => write!(
+                    w,
+                    "{}{}{}",
+                    self.color.punctuation.paint("\""),
+                    self.color.key.paint(format!("{}", v)),
+                    self.color.punctuation.paint("\"")
+                )?,
                 Document::Comment(_) => return Err(Error::KeyTypeError("comment")),
                 Document::Mapping(_) => return Err(Error::KeyTypeError("mapping")),
                 Document::Sequence(_) => return Err(Error::KeyTypeError("sequence")),
@@ -268,13 +303,13 @@ impl JsonEmitter {
                 Document::Compact(_) => return Err(Error::KeyTypeError("compact")),
                 Document::Null => return Err(Error::KeyTypeError("null")),
             };
-            write!(w, ": ")?;
+            write!(w, "{}", &self.color.punctuation.paint(": "))?;
             self.emit_node(w, value)?;
         }
         self.writeln(w, "")?;
         self.level -= 1;
         self.emit_indent(w)?;
-        write!(w, "}}")?;
+        write!(w, "{}", &self.color.aggregate.paint("}"))?;
         Ok(())
     }
 
@@ -285,9 +320,21 @@ impl JsonEmitter {
         let DocComment(comment, _formant) = comment;
         for line in comment.split('\n') {
             if line.is_empty() {
-                writeln!(w, "{}", self.comment.as_ref().unwrap())?;
+                writeln!(
+                    w,
+                    "{}",
+                    self.color.comment.paint(self.comment.as_ref().unwrap())
+                )?;
             } else {
-                writeln!(w, "{} {}", self.comment.as_ref().unwrap(), line)?;
+                writeln!(
+                    w,
+                    "{}",
+                    self.color.comment.paint(format!(
+                        "{} {}",
+                        self.comment.as_ref().unwrap(),
+                        line
+                    ))
+                )?;
             }
             self.emit_indent(w)?;
         }
@@ -303,7 +350,7 @@ impl JsonEmitter {
     }
 
     fn emit_string_strict<W: fmt::Write>(&mut self, w: &mut W, value: &str) -> Result<()> {
-        write!(w, "\"")?;
+        write!(w, "{}", &self.color.punctuation.paint("\""))?;
         let bytes = value.as_bytes();
         let mut start = 0;
         for (i, &byte) in bytes.iter().enumerate() {
@@ -312,18 +359,26 @@ impl JsonEmitter {
                 continue;
             }
             if start < i {
-                write!(w, "{}", &value[start..i])?;
+                write!(w, "{}", &self.color.string.paint(&value[start..i]))?;
             }
             match escape {
-                UU => write!(w, "\\u{:04x}", byte)?,
-                _ => write!(w, "\\{}", byte as char)?,
+                UU => write!(
+                    w,
+                    "{}",
+                    &self.color.escape.paint(format!("\\u{:04x}", byte))
+                )?,
+                _ => write!(
+                    w,
+                    "{}",
+                    &self.color.escape.paint(format!("\\{}", escape as char))
+                )?,
             };
             start = i + 1;
         }
         if start != bytes.len() {
-            write!(w, "{}", &value[start..])?;
+            write!(w, "{}", &self.color.string.paint(&value[start..]))?;
         }
-        write!(w, "\"")?;
+        write!(w, "{}", &self.color.punctuation.paint("\""))?;
         Ok(())
     }
 
@@ -332,10 +387,10 @@ impl JsonEmitter {
             writeln!(w)?;
             self.level += 1;
             self.emit_indent(w)?;
-            writeln!(w, "'''")?;
+            self.writeln(w, &self.color.punctuation.paint("'''").to_string())?;
             self.emit_indent(w)?;
         } else {
-            write!(w, "\"")?;
+            write!(w, "{}", &self.color.punctuation.paint("\""))?;
         }
         let bytes = value.as_bytes();
         let mut start = 0;
@@ -345,41 +400,53 @@ impl JsonEmitter {
                 continue;
             }
             if start < i {
-                write!(w, "{}", &value[start..i])?;
+                write!(w, "{}", &self.color.string.paint(&value[start..i]))?;
             }
             match escape {
-                UU => write!(w, "\\u{:04x}", byte)?,
+                UU => write!(
+                    w,
+                    "{}",
+                    &self.color.escape.paint(format!("\\u{:04x}", byte))
+                )?,
                 NN => match self.multiline {
-                    Multiline::None => write!(w, "\\{}", byte as char)?,
-                    Multiline::Json5 => writeln!(w, "\\")?,
+                    Multiline::None => write!(
+                        w,
+                        "{}",
+                        &self.color.escape.paint(format!("\\{}", escape as char))
+                    )?,
+                    Multiline::Json5 => writeln!(w, "{}", self.color.escape.paint("\\"))?,
                     Multiline::Hjson => {
                         writeln!(w)?;
                         self.emit_indent(w)?;
                     }
                 },
-                _ => write!(w, "\\{}", byte as char)?,
+                _ => write!(
+                    w,
+                    "{}",
+                    &self.color.escape.paint(format!("\\{}", escape as char))
+                )?,
             };
             start = i + 1;
         }
         if start != bytes.len() {
-            write!(w, "{}", &value[start..])?;
+            write!(w, "{}", &self.color.string.paint(&value[start..]))?;
         }
         if self.multiline == Multiline::Hjson {
             writeln!(w)?;
             self.emit_indent(w)?;
-            write!(w, "'''")?;
+            write!(w, "{}", &self.color.punctuation.paint("'''"))?;
             self.level -= 1;
         } else {
-            write!(w, "\"")?;
+            write!(w, "{}", &self.color.punctuation.paint("\""))?;
         }
         Ok(())
     }
 
     fn emit_boolean<W: fmt::Write>(&mut self, w: &mut W, b: bool) -> Result<()> {
         if b {
-            write!(w, "true")?;
+            write!(w, "{}", &self.color.boolean.paint("true"))?;
         } else {
-            write!(w, "false")?;
+            write!(w, "{}", &self.color.boolean.paint("false"))?;
         }
         Ok(())
     }
@@ -390,20 +457,26 @@ impl JsonEmitter {
         if self.strict_numeric_limits && !i.is_legal_json()
             || self.bases.get(&b).is_some() && self.literals.get(&b).is_none()
         {
-            write!(w, "\"{}\"", s)?;
+            write!(
+                w,
+                "{}{}{}",
+                self.color.punctuation.paint("\""),
+                self.color.integer.paint(s),
+                self.color.punctuation.paint("\"")
+            )?;
         } else {
-            write!(w, "{}", s)?;
+            write!(w, "{}", &self.color.integer.paint(s))?;
         }
         Ok(())
     }
 
     fn emit_float<W: fmt::Write>(&mut self, w: &mut W, f: f64) -> Result<()> {
-        write!(w, "{}", f)?;
+        write!(w, "{}", &self.color.float.paint(format!("{}", f)))?;
         Ok(())
     }
 
     fn emit_null<W: fmt::Write>(&mut self, w: &mut W) -> Result<()> {
-        write!(w, "null")?;
+        write!(w, "{}", &self.color.null.paint("null"))?;
         Ok(())
     }
 
@@ -423,11 +496,14 @@ impl JsonEmitter {
     fn writeln<W: fmt::Write>(&mut self, w: &mut W, s: &str) -> Result<()> {
         if self.compact {
             match s {
-                "," => write!(w, ", ")?,
+                "," => write!(w, "{} ", self.color.punctuation.paint(","))?,
                 _ => write!(w, "{}", s)?,
             };
         } else {
-            writeln!(w, "{}", s)?;
+            match s {
+                "," => writeln!(w, "{}", self.color.punctuation.paint(","))?,
+                _ => writeln!(w, "{}", s)?,
+            };
         }
         Ok(())
     }
