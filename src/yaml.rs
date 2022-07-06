@@ -1,3 +1,4 @@
+use crate::color::ColorProfile;
 use crate::document::{Comment, Document, KeyValue, StrFormat};
 use crate::error::Error;
 use crate::integer::Int;
@@ -8,6 +9,7 @@ type Result<T> = std::result::Result<T, Error>;
 pub struct Yaml {
     document: Document,
     indent: usize,
+    color: ColorProfile,
     compact: bool,
     header: bool,
 }
@@ -25,6 +27,10 @@ impl Yaml {
         self.header = b;
         self
     }
+    pub fn color(mut self, c: ColorProfile) -> Self {
+        self.color = c;
+        self
+    }
 }
 
 impl fmt::Display for Yaml {
@@ -32,7 +38,9 @@ impl fmt::Display for Yaml {
         let mut emitter = YamlEmitter {
             level: -1,
             indent: self.indent,
+            color: self.color,
             compact: self.compact,
+            is_key: false,
         };
         if self.header {
             writeln!(f, "---")?;
@@ -46,6 +54,7 @@ impl Document {
         Yaml {
             document: self,
             indent: 2,
+            color: ColorProfile::default(),
             compact: false,
             header: true,
         }
@@ -55,7 +64,9 @@ impl Document {
 pub struct YamlEmitter {
     level: isize,
     indent: usize,
+    color: ColorProfile,
     compact: bool,
+    is_key: bool,
 }
 
 impl Default for YamlEmitter {
@@ -63,12 +74,15 @@ impl Default for YamlEmitter {
         YamlEmitter {
             level: -1,
             indent: 2,
+            color: ColorProfile::default(),
             compact: false,
+            is_key: false,
         }
     }
 }
 
 impl YamlEmitter {
+    const SPACE: &'static str = "                                                                                                    ";
     fn emit_node<W: fmt::Write>(&mut self, w: &mut W, node: &Document) -> Result<()> {
         match node {
             Document::Comment(c) => self.emit_comment(w, c),
@@ -93,17 +107,23 @@ impl YamlEmitter {
     }
 
     fn emit_bytes<W: fmt::Write>(&mut self, w: &mut W, bytes: &[u8]) -> Result<()> {
-        self.writeln(w, "[")?;
+        self.writeln(w, &self.color.aggregate.paint("[").to_string())?;
         self.emit_indent(w)?;
         for (i, chunk) in bytes.chunks(16).enumerate() {
             if i > 0 {
                 self.writeln(w, "")?;
             }
+            let color = if self.is_key {
+                &self.color.key
+            } else {
+                &self.color.integer
+            };
             for b in chunk {
-                write!(w, "0x{:02X},", b)?;
+                write!(w, "{}", color.paint(format!("0x{:02X},", b)))?;
             }
         }
-        self.writeln(w, "]")?;
+        self.writeln(w, "")?;
+        write!(w, "{}", self.color.aggregate.paint("]"))?;
         self.emit_indent(w)?;
         Ok(())
     }
@@ -138,14 +158,14 @@ impl YamlEmitter {
 
     fn emit_sequence<W: fmt::Write>(&mut self, w: &mut W, sequence: &[Document]) -> Result<()> {
         if self.compact || sequence.is_empty() {
-            write!(w, "[")?;
+            write!(w, "{}", self.color.aggregate.paint("["))?;
             for (i, v) in sequence.iter().enumerate() {
                 if i > 0 {
-                    write!(w, ", ")?;
+                    write!(w, "{}", self.color.punctuation.paint(", "))?;
                 }
                 self.emit_node(w, v)?;
             }
-            write!(w, "]")?;
+            write!(w, "{}", self.color.aggregate.paint("]"))?;
         } else {
             self.level += 1;
             for (i, v) in sequence.iter().enumerate() {
@@ -153,7 +173,7 @@ impl YamlEmitter {
                     writeln!(w)?;
                     self.emit_indent(w)?
                 }
-                self.emit_helper(w, "-", v)?;
+                self.emit_helper(w, &self.color.punctuation.paint("-").to_string(), v)?;
             }
             self.level -= 1;
         }
@@ -162,7 +182,7 @@ impl YamlEmitter {
 
     fn emit_mapping<W: fmt::Write>(&mut self, w: &mut W, mapping: &[KeyValue]) -> Result<()> {
         if self.compact || mapping.is_empty() {
-            write!(w, "{{")?;
+            write!(w, "{}", self.color.aggregate.paint("{"))?;
         } else {
             self.level += 1;
         }
@@ -170,7 +190,7 @@ impl YamlEmitter {
         for KeyValue(key, value, comment) in mapping.iter() {
             if !skip {
                 if self.compact {
-                    write!(w, ", ")?;
+                    write!(w, "{}", self.color.punctuation.paint(", "))?;
                 } else {
                     writeln!(w)?;
                     self.emit_indent(w)?;
@@ -179,12 +199,15 @@ impl YamlEmitter {
             if let Some(c) = &comment {
                 self.emit_comment(w, c)?;
             }
+            let k = self.is_key;
+            self.is_key = true;
             self.emit_node(w, &key)?;
-            self.emit_helper(w, ":", value)?;
+            self.is_key = k;
+            self.emit_helper(w, &self.color.punctuation.paint(":").to_string(), value)?;
             skip = false;
         }
         if self.compact || mapping.is_empty() {
-            write!(w, "}}")?;
+            write!(w, "{}", self.color.aggregate.paint(")"))?;
         } else {
             self.level -= 1;
         }
@@ -196,9 +219,13 @@ impl YamlEmitter {
             let Comment(comment, _format) = comment;
             for line in comment.split('\n') {
                 if line.is_empty() {
-                    writeln!(w, "#")?;
+                    writeln!(w, "{}", &self.color.comment.paint("#").to_string())?;
                 } else {
-                    writeln!(w, "# {}", line)?;
+                    writeln!(
+                        w,
+                        "{}",
+                        &self.color.comment.paint(format!("# {}", line)).to_string()
+                    )?;
                 }
                 self.emit_indent(w)?;
             }
@@ -209,50 +236,70 @@ impl YamlEmitter {
     fn emit_string<W: fmt::Write>(&mut self, w: &mut W, value: &str, f: StrFormat) -> Result<()> {
         match f {
             StrFormat::Multiline => self.emit_string_multiline(w, value)?,
-            StrFormat::Quoted => escape_str(w, value, true)?,
-            StrFormat::Standard => escape_str(w, value, need_quotes(value))?,
+            StrFormat::Quoted => self.escape_str(w, value, true)?,
+            StrFormat::Standard => self.escape_str(w, value, need_quotes(value))?,
         }
         Ok(())
     }
 
     fn emit_string_multiline<W: fmt::Write>(&mut self, w: &mut W, mut value: &str) -> Result<()> {
         if value.ends_with('\n') {
-            write!(w, "|+")?;
+            write!(w, "{}", self.color.punctuation.paint("|+"))?;
             value = &value[..value.len() - 1];
         } else {
-            write!(w, "|-")?;
+            write!(w, "{}", self.color.punctuation.paint("|-"))?;
         }
         self.level += 1;
         for line in value.split('\n') {
             writeln!(w)?;
             self.emit_indent(w)?;
-            escape_str(w, line, false)?;
+            self.escape_str(w, line, false)?;
         }
         self.level -= 1;
         Ok(())
     }
 
     fn emit_boolean<W: fmt::Write>(&mut self, w: &mut W, b: bool) -> Result<()> {
-        if b {
-            write!(w, "true")?;
+        let color = if self.is_key {
+            &self.color.key
         } else {
-            write!(w, "false")?;
+            &self.color.boolean
+        };
+        if b {
+            write!(w, "{}", color.paint("true"))?;
+        } else {
+            write!(w, "{}", color.paint("false"))?;
         }
         Ok(())
     }
 
     fn emit_int<W: fmt::Write>(&mut self, w: &mut W, i: &Int) -> Result<()> {
-        write!(w, "{}", i)?;
+        let color = if self.is_key {
+            &self.color.key
+        } else {
+            &self.color.integer
+        };
+        write!(w, "{}", color.paint(i.to_string()))?;
         Ok(())
     }
 
     fn emit_float<W: fmt::Write>(&mut self, w: &mut W, f: f64) -> Result<()> {
-        write!(w, "{}", f)?;
+        let color = if self.is_key {
+            &self.color.key
+        } else {
+            &self.color.float
+        };
+        write!(w, "{}", color.paint(f.to_string()))?;
         Ok(())
     }
 
     fn emit_null<W: fmt::Write>(&mut self, w: &mut W) -> Result<()> {
-        write!(w, "null")?;
+        let color = if self.is_key {
+            &self.color.key
+        } else {
+            &self.color.null
+        };
+        write!(w, "{}", color.paint("null"))?;
         Ok(())
     }
 
@@ -267,8 +314,8 @@ impl YamlEmitter {
         }
         let mut len = (extra as usize) * self.indent;
         while len > 0 {
-            let chunk = std::cmp::min(len, SPACE.len());
-            write!(w, "{}", &SPACE[..chunk])?;
+            let chunk = std::cmp::min(len, Self::SPACE.len());
+            write!(w, "{}", &Self::SPACE[..chunk])?;
             len -= chunk;
         }
         Ok(())
@@ -277,82 +324,90 @@ impl YamlEmitter {
     fn writeln<W: fmt::Write>(&mut self, w: &mut W, s: &str) -> Result<()> {
         if self.compact {
             match s {
-                "," => write!(w, ", ")?,
+                "," => write!(w, "{}", self.color.punctuation.paint(", "))?,
                 _ => write!(w, "{}", s)?,
             };
         } else {
-            writeln!(w, "{}", s)?;
+            match s {
+                "," => writeln!(w, "{}", self.color.punctuation.paint(","))?,
+                _ => writeln!(w, "{}", s)?,
+            };
         }
         Ok(())
     }
-}
 
-const SPACE: &str = "                                                                                                    ";
-// From yaml-rust:
-fn escape_str<W: fmt::Write>(
-    wr: &mut W,
-    v: &str,
-    quoted: bool,
-) -> std::result::Result<(), fmt::Error> {
-    if quoted {
-        wr.write_str("\"")?;
-    }
-
-    let mut start = 0;
-    for (i, byte) in v.bytes().enumerate() {
-        let escaped = match byte {
-            b'"' if quoted => "\\\"",
-            b'\\' => "\\\\",
-            b'\x00' => "\\u0000",
-            b'\x01' => "\\u0001",
-            b'\x02' => "\\u0002",
-            b'\x03' => "\\u0003",
-            b'\x04' => "\\u0004",
-            b'\x05' => "\\u0005",
-            b'\x06' => "\\u0006",
-            b'\x07' => "\\u0007",
-            b'\x08' => "\\b",
-            b'\t' => "\\t",
-            b'\n' => "\\n",
-            b'\x0b' => "\\u000b",
-            b'\x0c' => "\\f",
-            b'\r' => "\\r",
-            b'\x0e' => "\\u000e",
-            b'\x0f' => "\\u000f",
-            b'\x10' => "\\u0010",
-            b'\x11' => "\\u0011",
-            b'\x12' => "\\u0012",
-            b'\x13' => "\\u0013",
-            b'\x14' => "\\u0014",
-            b'\x15' => "\\u0015",
-            b'\x16' => "\\u0016",
-            b'\x17' => "\\u0017",
-            b'\x18' => "\\u0018",
-            b'\x19' => "\\u0019",
-            b'\x1a' => "\\u001a",
-            b'\x1b' => "\\u001b",
-            b'\x1c' => "\\u001c",
-            b'\x1d' => "\\u001d",
-            b'\x1e' => "\\u001e",
-            b'\x1f' => "\\u001f",
-            b'\x7f' => "\\u007f",
-            _ => continue,
+    // From yaml-rust:
+    fn escape_str<W: fmt::Write>(
+        &self,
+        wr: &mut W,
+        v: &str,
+        quoted: bool,
+    ) -> std::result::Result<(), fmt::Error> {
+        let color = if self.is_key {
+            &self.color.key
+        } else {
+            &self.color.string
         };
-        if start < i {
-            wr.write_str(&v[start..i])?;
+        if quoted {
+            wr.write_str(&self.color.punctuation.paint("\"").to_string())?;
         }
-        wr.write_str(escaped)?;
-        start = i + 1;
-    }
 
-    if start != v.len() {
-        wr.write_str(&v[start..])?;
-    }
+        let mut start = 0;
+        for (i, byte) in v.bytes().enumerate() {
+            let escaped = match byte {
+                b'"' if quoted => "\\\"",
+                b'\\' => "\\\\",
+                b'\x00' => "\\u0000",
+                b'\x01' => "\\u0001",
+                b'\x02' => "\\u0002",
+                b'\x03' => "\\u0003",
+                b'\x04' => "\\u0004",
+                b'\x05' => "\\u0005",
+                b'\x06' => "\\u0006",
+                b'\x07' => "\\u0007",
+                b'\x08' => "\\b",
+                b'\t' => "\\t",
+                b'\n' => "\\n",
+                b'\x0b' => "\\u000b",
+                b'\x0c' => "\\f",
+                b'\r' => "\\r",
+                b'\x0e' => "\\u000e",
+                b'\x0f' => "\\u000f",
+                b'\x10' => "\\u0010",
+                b'\x11' => "\\u0011",
+                b'\x12' => "\\u0012",
+                b'\x13' => "\\u0013",
+                b'\x14' => "\\u0014",
+                b'\x15' => "\\u0015",
+                b'\x16' => "\\u0016",
+                b'\x17' => "\\u0017",
+                b'\x18' => "\\u0018",
+                b'\x19' => "\\u0019",
+                b'\x1a' => "\\u001a",
+                b'\x1b' => "\\u001b",
+                b'\x1c' => "\\u001c",
+                b'\x1d' => "\\u001d",
+                b'\x1e' => "\\u001e",
+                b'\x1f' => "\\u001f",
+                b'\x7f' => "\\u007f",
+                _ => continue,
+            };
+            if start < i {
+                wr.write_str(&color.paint(&v[start..i]).to_string())?;
+            }
+            wr.write_str(&self.color.escape.paint(escaped).to_string())?;
+            start = i + 1;
+        }
 
-    if quoted {
-        wr.write_str("\"")?;
+        if start != v.len() {
+            wr.write_str(&color.paint(&v[start..]).to_string())?;
+        }
+
+        if quoted {
+            wr.write_str(&self.color.punctuation.paint("\"").to_string())?;
+        }
+        Ok(())
     }
-    Ok(())
 }
 
 // From yaml-rust:

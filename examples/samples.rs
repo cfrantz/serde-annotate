@@ -69,6 +69,9 @@ struct Everything {
     string: String,
     #[annotate(format=block, comment="Multiline String")]
     multiline: String,
+    #[serde(with = "serde_bytes")]
+    #[annotate(format=hex, comment="Bytes")]
+    bytes: Vec<u8>,
     #[annotate(comment = "Integer")]
     num: u32,
     #[annotate(format=hex, comment="Integer (hex)")]
@@ -135,6 +138,11 @@ fn main() -> Result<()> {
             let value = Everything {
                 string: "This is a string\nwith some\nescapes".into(),
                 multiline: "This is\na multiline\nstring!".into(),
+                bytes: vec![
+                    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x10, 0x11, 0x12, 0x13, 0x14,
+                    0x15, 0x16, 0x17, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x30, 0x31,
+                    0x32, 0x33, 0x34, 0x35, 0x36, 0x37,
+                ],
                 num: 100,
                 hex: 0xdecaf,
                 oct: 0o755,
@@ -174,8 +182,10 @@ fn main() -> Result<()> {
             d.to_string()
         }
         Format::Yaml => {
-            let d = document.to_yaml();
-            //if args.color { d = d.color(profile); }
+            let mut d = document.to_yaml();
+            if args.color {
+                d = d.color(profile);
+            }
             d.to_string()
         }
     };
