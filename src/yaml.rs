@@ -207,7 +207,7 @@ impl YamlEmitter {
             skip = false;
         }
         if self.compact || mapping.is_empty() {
-            write!(w, "{}", self.color.aggregate.paint(")"))?;
+            write!(w, "{}", self.color.aggregate.paint("}"))?;
         } else {
             self.level -= 1;
         }
