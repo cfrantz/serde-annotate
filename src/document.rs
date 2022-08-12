@@ -3,6 +3,7 @@
 //
 use crate::error::Error;
 use crate::integer::Int;
+use crate::relax::Relax;
 
 /// Represents possible serialized string formats.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -56,6 +57,11 @@ impl From<&'static str> for Document {
 }
 
 impl Document {
+    pub fn parse(text: &str) -> Result<Document, Error> {
+        let relax = Relax::default();
+        relax.from_str(text)
+    }
+
     pub fn variant(&self) -> &'static str {
         match self {
             Document::Comment(_, _) => "Comment",
@@ -92,6 +98,26 @@ impl Document {
         } else {
             Err(Error::StructureError("2 elements", "??"))
         }
+    }
+
+    pub fn has_value(&self) -> bool {
+        match self {
+            Document::Comment(_, _) => false,
+            Document::Compact(c) => c.has_value(),
+            Document::Fragment(f) => f.iter().any(Document::has_value),
+            _ => true,
+        }
+    }
+
+    pub fn last_value_index(sequence: &[Document]) -> usize {
+        let mut last = sequence.len();
+        for (i, frag) in sequence.iter().enumerate().rev() {
+            if frag.has_value() {
+                last = i;
+                break;
+            }
+        }
+        last
     }
 
     pub fn comment(&self) -> Option<(&str, &CommentFormat)> {

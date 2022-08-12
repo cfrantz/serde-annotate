@@ -25,7 +25,7 @@ pub enum IntValue {
     I128(i128),
 }
 
-macro_rules! impl_from {
+macro_rules! impl_from_primitive {
     ($t:ty, $f:ident) => {
         impl From<$t> for IntValue {
             fn from(val: $t) -> Self {
@@ -35,16 +35,16 @@ macro_rules! impl_from {
     };
 }
 
-impl_from!(u8, U8);
-impl_from!(u16, U16);
-impl_from!(u32, U32);
-impl_from!(u64, U64);
-impl_from!(u128, U128);
-impl_from!(i8, I8);
-impl_from!(i16, I16);
-impl_from!(i32, I32);
-impl_from!(i64, I64);
-impl_from!(i128, I128);
+impl_from_primitive!(u8, U8);
+impl_from_primitive!(u16, U16);
+impl_from_primitive!(u32, U32);
+impl_from_primitive!(u64, U64);
+impl_from_primitive!(u128, U128);
+impl_from_primitive!(i8, I8);
+impl_from_primitive!(i16, I16);
+impl_from_primitive!(i32, I32);
+impl_from_primitive!(i64, I64);
+impl_from_primitive!(i128, I128);
 
 impl IntValue {
     const HEX: &'static [u8; 16] = b"0123456789ABCDEF";
@@ -166,6 +166,38 @@ impl fmt::Display for Int {
         write!(f, "{}", self.format(Some(&self.base)))
     }
 }
+
+macro_rules! impl_from_int {
+    ($t:ty) => {
+        impl From<Int> for $t {
+            fn from(val: Int) -> Self {
+                match val.value {
+                    IntValue::U8(v) => v as $t,
+                    IntValue::U16(v) => v as $t,
+                    IntValue::U32(v) => v as $t,
+                    IntValue::U64(v) => v as $t,
+                    IntValue::U128(v) => v as $t,
+                    IntValue::I8(v) => v as $t,
+                    IntValue::I16(v) => v as $t,
+                    IntValue::I32(v) => v as $t,
+                    IntValue::I64(v) => v as $t,
+                    IntValue::I128(v) => v as $t,
+                }
+            }
+        }
+    };
+}
+
+impl_from_int!(u8);
+impl_from_int!(u16);
+impl_from_int!(u32);
+impl_from_int!(u64);
+impl_from_int!(u128);
+impl_from_int!(i8);
+impl_from_int!(i16);
+impl_from_int!(i32);
+impl_from_int!(i64);
+impl_from_int!(i128);
 
 #[cfg(test)]
 mod tests {

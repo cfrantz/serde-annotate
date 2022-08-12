@@ -1,0 +1,17 @@
+{
+    // Comment before "a".
+    "a": "This is a test",
+    // "b" is a bareword.
+    b: 12345,
+    // A hex constant
+    c: 0x1234,
+    d: [
+        // A true value
+        true,
+        // A false value
+        false,
+        "other", // other
+        "extra"
+        // extra comment
+    ]
+}
