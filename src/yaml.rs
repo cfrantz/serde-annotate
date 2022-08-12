@@ -85,7 +85,7 @@ impl YamlEmitter {
     const SPACE: &'static str = "                                                                                                    ";
     fn emit_node<W: fmt::Write>(&mut self, w: &mut W, node: &Document) -> Result<()> {
         match node {
-            Document::Comment(c, f) => self.emit_comment(w, c, f),
+            Document::Comment(c, f) => self.emit_comment_newline(w, c, f),
             Document::String(v, f) => self.emit_string(w, v.as_str(), *f),
             Document::StaticStr(v, f) => self.emit_string(w, v, *f),
             Document::Boolean(v) => self.emit_boolean(w, *v),
@@ -99,6 +99,10 @@ impl YamlEmitter {
             Document::Fragment(ds) => {
                 for d in ds {
                     self.emit_node(w, d)?;
+                    if d.has_value() {
+                        self.writeln(w, "")?;
+                        self.emit_indent(w)?;
+                    }
                 }
                 Ok(())
             }
@@ -160,7 +164,7 @@ impl YamlEmitter {
             }
             _ => write!(w, "{} ", prefix)?,
         };
-        self.emit_node(w, value)
+        Ok(())
     }
 
     fn emit_sequence<W: fmt::Write>(&mut self, w: &mut W, sequence: &[Document]) -> Result<()> {
@@ -175,12 +179,39 @@ impl YamlEmitter {
             write!(w, "{}", self.color.aggregate.paint("]"))?;
         } else {
             self.level += 1;
-            for (i, v) in sequence.iter().enumerate() {
+            for (i, value) in sequence.iter().enumerate() {
                 if i > 0 {
                     writeln!(w)?;
                     self.emit_indent(w)?
                 }
-                self.emit_helper(w, &self.color.punctuation.paint("-").to_string(), v)?;
+                if let Document::Fragment(frags) = value {
+                    let mut val_done = false;
+                    let mut it = frags.iter().peekable();
+                    loop {
+                        let node = if let Some(n) = it.next() {
+                            n
+                        } else {
+                            break;
+                        };
+                        let next = it.peek();
+                        if let Some((c, f)) = node.comment() {
+                            if val_done {
+                                write!(w, " ")?;
+                            }
+                            if self.emit_comment(w, c, f)? && next.is_some() {
+                                self.writeln(w, "")?;
+                                self.emit_indent(w)?;
+                            }
+                            continue;
+                        }
+                        self.emit_helper(w, &self.color.punctuation.paint("-").to_string(), node)?;
+                        self.emit_node(w, node)?;
+                        val_done = true;
+                    }
+                } else {
+                    self.emit_helper(w, &self.color.punctuation.paint("-").to_string(), value)?;
+                    self.emit_node(w, value)?;
+                }
             }
             self.level -= 1;
         }
@@ -193,34 +224,56 @@ impl YamlEmitter {
         } else {
             self.level += 1;
         }
-        let mut skip = true;
-        for frag in mapping.iter() {
+        for (i, frag) in mapping.iter().enumerate() {
             let nodes = frag.fragments()?;
-            if !skip {
+            if i > 0 {
                 if self.compact {
-                    write!(w, "{}", self.color.punctuation.paint(", "))?;
+                    write!(w, ", ")?;
                 } else {
-                    writeln!(w)?;
+                    self.writeln(w, "")?;
                     self.emit_indent(w)?;
                 }
             }
             let mut key_done = false;
-            for node in nodes {
+            let mut val_done = false;
+            let mut it = nodes.iter().peekable();
+            loop {
+                let node = if let Some(n) = it.next() {
+                    n
+                } else {
+                    break;
+                };
+                let next = it.peek();
                 if let Some((c, f)) = node.comment() {
-                    self.emit_comment(w, c, f)?;
+                    if val_done {
+                        write!(w, " ")?;
+                    }
+                    if self.emit_comment(w, c, f)? && next.is_some() {
+                        self.writeln(w, "")?;
+                        self.emit_indent(w)?;
+                    }
                     continue;
                 }
-                if key_done {
-                    self.emit_helper(w, &self.color.punctuation.paint(":").to_string(), node)?;
+                if !key_done {
+                    if next.is_none() {
+                        return Err(Error::StructureError("a node", "none"));
+                    }
+                    let k = self.is_key;
+                    self.is_key = true;
+                    self.emit_node(w, node)?;
+                    self.is_key = k;
+                    key_done = true;
+                    self.emit_helper(
+                        w,
+                        &self.color.punctuation.paint(":").to_string(),
+                        next.unwrap(),
+                    )?;
+                } else if !val_done {
+                    self.emit_node(w, node)?;
+                    val_done = true;
                     continue;
                 }
-                let k = self.is_key;
-                self.is_key = true;
-                self.emit_node(w, node)?;
-                self.is_key = k;
-                key_done = true;
             }
-            skip = false;
         }
         if self.compact || mapping.is_empty() {
             write!(w, "{}", self.color.aggregate.paint("}"))?;
@@ -230,27 +283,45 @@ impl YamlEmitter {
         Ok(())
     }
 
+    fn emit_comment_newline<W: fmt::Write>(
+        &mut self,
+        w: &mut W,
+        comment: &str,
+        format: &CommentFormat,
+    ) -> Result<()> {
+        if self.emit_comment(w, comment, format)? {
+            writeln!(w)?;
+            self.emit_indent(w)?;
+        }
+        Ok(())
+    }
+
     fn emit_comment<W: fmt::Write>(
         &mut self,
         w: &mut W,
         comment: &str,
         _format: &CommentFormat,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         if !self.compact {
-            for line in comment.split('\n') {
+            for (i, line) in comment.split('\n').enumerate() {
+                if i > 0 {
+                    writeln!(w)?;
+                    self.emit_indent(w)?;
+                }
                 if line.is_empty() {
-                    writeln!(w, "{}", &self.color.comment.paint("#").to_string())?;
+                    write!(w, "{}", &self.color.comment.paint("#").to_string())?;
                 } else {
-                    writeln!(
+                    write!(
                         w,
                         "{}",
                         &self.color.comment.paint(format!("# {}", line)).to_string()
                     )?;
                 }
-                self.emit_indent(w)?;
             }
+            Ok(true)
+        } else {
+            Ok(false)
         }
-        Ok(())
     }
 
     fn emit_string<W: fmt::Write>(&mut self, w: &mut W, value: &str, f: StrFormat) -> Result<()> {

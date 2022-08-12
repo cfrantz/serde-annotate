@@ -4,6 +4,7 @@ mod document;
 mod error;
 mod integer;
 mod json;
+mod relax;
 mod ser;
 mod yaml;
 

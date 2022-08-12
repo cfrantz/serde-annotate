@@ -1,0 +1,11 @@
+// Leading comment
+{
+    // Comment before "a".
+    "a": "This is a test",
+    // "b" is a bareword.
+    b: 12345,
+    // A hex constant
+    c: 0x1234
+    // In-object Trailing comment
+}
+// Post-object trailing comment.

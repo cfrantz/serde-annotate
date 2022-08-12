@@ -191,7 +191,7 @@ impl Default for JsonEmitter {
 impl JsonEmitter {
     fn emit_node<W: fmt::Write>(&mut self, w: &mut W, node: &Document) -> Result<()> {
         match node {
-            Document::Comment(c, f) => self.emit_comment(w, c, f),
+            Document::Comment(c, f) => self.emit_comment_newline(w, c, f),
             Document::String(v, f) => self.emit_string(w, v.as_str(), *f),
             Document::StaticStr(v, f) => self.emit_string(w, v, *f),
             Document::Boolean(v) => self.emit_boolean(w, *v),
@@ -205,6 +205,10 @@ impl JsonEmitter {
             Document::Fragment(ds) => {
                 for d in ds {
                     self.emit_node(w, d)?;
+                    if d.has_value() {
+                        self.writeln(w, "")?;
+                        self.emit_indent(w)?;
+                    }
                 }
                 Ok(())
             }
@@ -237,18 +241,60 @@ impl JsonEmitter {
         Ok(())
     }
 
+    // TODO: Can this function be rewritten to be less complex?
     fn emit_sequence<W: fmt::Write>(&mut self, w: &mut W, sequence: &[Document]) -> Result<()> {
         self.level += 1;
         self.writeln(w, &self.color.aggregate.paint("[").to_string())?;
-        self.emit_indent(w)?;
-        for (i, value) in sequence.iter().enumerate() {
-            if i > 0 {
-                self.writeln(w, ",")?;
-                self.emit_indent(w)?;
-            }
-            self.emit_node(w, value)?;
+        if !sequence.is_empty() {
+            self.emit_indent(w)?;
         }
-        self.writeln(w, "")?;
+        let last = Document::last_value_index(sequence);
+        let mut need_eol = false;
+        for (i, value) in sequence.iter().enumerate() {
+            if i > 0 && need_eol {
+                write!(w, "{}", if self.compact { " " } else { "\n" })?;
+                if i <= last || self.comment.is_some() {
+                    self.emit_indent(w)?;
+                }
+                need_eol = false;
+            }
+            if let Document::Fragment(nodes) = value {
+                let mut val_done = false;
+                for node in nodes {
+                    if let Some((c, f)) = node.comment() {
+                        if val_done && need_eol {
+                            write!(w, " ")?;
+                        }
+                        need_eol = self.emit_comment(w, c, f)?;
+                        if need_eol && !val_done {
+                            writeln!(w)?;
+                            self.emit_indent(w)?;
+                        }
+                        need_eol |= i < last;
+                        continue;
+                    }
+                    if !val_done {
+                        self.emit_node(w, node)?;
+                        if i != last {
+                            write!(w, "{}", &self.color.punctuation.paint(","))?;
+                        }
+                        val_done = true;
+                        need_eol = true;
+                    } else {
+                        return Err(Error::StructureError("Comment", node.variant()));
+                    }
+                }
+            } else {
+                self.emit_node(w, value)?;
+                if i != last {
+                    write!(w, "{}", &self.color.punctuation.paint(","))?;
+                }
+                need_eol = true;
+            }
+        }
+        if need_eol {
+            self.writeln(w, "")?;
+        }
         self.level -= 1;
         self.emit_indent(w)?;
         write!(w, "{}", &self.color.aggregate.paint("]"))?;
@@ -270,66 +316,103 @@ impl JsonEmitter {
         Ok(())
     }
 
+    // TODO: Can this function be rewritten to be less complex?
     fn emit_mapping<W: fmt::Write>(&mut self, w: &mut W, mapping: &[Document]) -> Result<()> {
         self.level += 1;
         self.writeln(w, &self.color.aggregate.paint("{").to_string())?;
-        self.emit_indent(w)?;
+        if !mapping.is_empty() {
+            self.emit_indent(w)?;
+        }
+        let last = Document::last_value_index(mapping);
+        let mut need_eol = false;
         for (i, frag) in mapping.iter().enumerate() {
             let nodes = frag.fragments()?;
-            if i > 0 {
-                self.writeln(w, ",")?;
-                self.emit_indent(w)?;
+            if i > 0 && need_eol {
+                write!(w, "{}", if self.compact { " " } else { "\n" })?;
+                if i <= last || self.comment.is_some() {
+                    self.emit_indent(w)?;
+                }
+                need_eol = false;
             }
-            let mut key_done = false;
+            let mut key_done = i > last;
+            let mut val_done = i > last;
             for node in nodes {
                 if let Some((c, f)) = node.comment() {
-                    self.emit_comment(w, c, f)?;
+                    if val_done && need_eol {
+                        write!(w, " ")?;
+                    }
+                    need_eol = self.emit_comment(w, c, f)?;
+                    if need_eol && !key_done {
+                        writeln!(w)?;
+                        self.emit_indent(w)?;
+                    }
+                    need_eol |= i < last;
                     continue;
                 }
-                if key_done {
+                if !key_done {
+                    match node {
+                        Document::String(s, _) => self.emit_key(w, s.as_str())?,
+                        Document::StaticStr(s, _) => self.emit_key(w, s)?,
+                        Document::Boolean(v) => write!(
+                            w,
+                            "{}{}{}",
+                            self.color.punctuation.paint("\""),
+                            self.color.key.paint(format!("{}", v)),
+                            self.color.punctuation.paint("\"")
+                        )?,
+                        Document::Int(v) => write!(
+                            w,
+                            "{}{}{}",
+                            self.color.punctuation.paint("\""),
+                            self.color.key.paint(format!("{}", v)),
+                            self.color.punctuation.paint("\"")
+                        )?,
+                        Document::Float(v) => write!(
+                            w,
+                            "{}{}{}",
+                            self.color.punctuation.paint("\""),
+                            self.color.key.paint(format!("{}", v)),
+                            self.color.punctuation.paint("\"")
+                        )?,
+                        Document::Comment(_, _) => return Err(Error::KeyTypeError("comment")),
+                        Document::Mapping(_) => return Err(Error::KeyTypeError("mapping")),
+                        Document::Sequence(_) => return Err(Error::KeyTypeError("sequence")),
+                        Document::Bytes(_) => return Err(Error::KeyTypeError("bytes")),
+                        Document::Compact(_) => return Err(Error::KeyTypeError("compact")),
+                        Document::Fragment(_) => return Err(Error::KeyTypeError("fragment")),
+                        Document::Null => return Err(Error::KeyTypeError("null")),
+                    };
+                    write!(w, "{}", &self.color.punctuation.paint(": "))?;
+                    key_done = true;
+                } else if !val_done {
                     self.emit_node(w, node)?;
-                    continue;
+                    if i != last {
+                        write!(w, "{}", &self.color.punctuation.paint(","))?;
+                    }
+                    val_done = true;
+                    need_eol = true;
                 }
-                match node {
-                    Document::String(s, _) => self.emit_key(w, s.as_str())?,
-                    Document::StaticStr(s, _) => self.emit_key(w, s)?,
-                    Document::Boolean(v) => write!(
-                        w,
-                        "{}{}{}",
-                        self.color.punctuation.paint("\""),
-                        self.color.key.paint(format!("{}", v)),
-                        self.color.punctuation.paint("\"")
-                    )?,
-                    Document::Int(v) => write!(
-                        w,
-                        "{}{}{}",
-                        self.color.punctuation.paint("\""),
-                        self.color.key.paint(format!("{}", v)),
-                        self.color.punctuation.paint("\"")
-                    )?,
-                    Document::Float(v) => write!(
-                        w,
-                        "{}{}{}",
-                        self.color.punctuation.paint("\""),
-                        self.color.key.paint(format!("{}", v)),
-                        self.color.punctuation.paint("\"")
-                    )?,
-                    Document::Comment(_, _) => return Err(Error::KeyTypeError("comment")),
-                    Document::Mapping(_) => return Err(Error::KeyTypeError("mapping")),
-                    Document::Sequence(_) => return Err(Error::KeyTypeError("sequence")),
-                    Document::Bytes(_) => return Err(Error::KeyTypeError("bytes")),
-                    Document::Compact(_) => return Err(Error::KeyTypeError("compact")),
-                    Document::Fragment(_) => return Err(Error::KeyTypeError("fragment")),
-                    Document::Null => return Err(Error::KeyTypeError("null")),
-                };
-                write!(w, "{}", &self.color.punctuation.paint(": "))?;
-                key_done = true;
             }
         }
-        self.writeln(w, "")?;
+        if need_eol {
+            self.writeln(w, "")?;
+        }
         self.level -= 1;
         self.emit_indent(w)?;
         write!(w, "{}", &self.color.aggregate.paint("}"))?;
+        Ok(())
+    }
+
+    fn emit_comment_newline<W: fmt::Write>(
+        &mut self,
+        w: &mut W,
+        comment: &str,
+        format: &CommentFormat,
+    ) -> Result<()> {
+        if self.emit_comment(w, comment, format)? {
+            writeln!(w)?;
+            self.emit_indent(w)?;
+        }
         Ok(())
     }
 
@@ -338,19 +421,23 @@ impl JsonEmitter {
         w: &mut W,
         comment: &str,
         _format: &CommentFormat,
-    ) -> Result<()> {
-        if self.comment.is_none() || self.compact {
-            return Ok(());
+    ) -> Result<bool> {
+        if self.compact || self.comment.is_none() {
+            return Ok(false);
         }
-        for line in comment.split('\n') {
+        for (i, line) in comment.split('\n').enumerate() {
+            if i > 0 {
+                writeln!(w)?;
+                self.emit_indent(w)?;
+            }
             if line.is_empty() {
-                writeln!(
+                write!(
                     w,
                     "{}",
                     self.color.comment.paint(self.comment.as_ref().unwrap())
                 )?;
             } else {
-                writeln!(
+                write!(
                     w,
                     "{}",
                     self.color.comment.paint(format!(
@@ -360,9 +447,8 @@ impl JsonEmitter {
                     ))
                 )?;
             }
-            self.emit_indent(w)?;
         }
-        Ok(())
+        Ok(true)
     }
 
     fn emit_string<W: fmt::Write>(&mut self, w: &mut W, value: &str, f: StrFormat) -> Result<()> {
