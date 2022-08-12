@@ -1,6 +1,5 @@
 use crate::color::ColorProfile;
-use crate::document::Comment as DocComment;
-use crate::document::{Document, KeyValue, StrFormat};
+use crate::document::{CommentFormat, Document, StrFormat};
 use crate::error::Error;
 use crate::integer::{Base, Int};
 use once_cell::sync::OnceCell;
@@ -192,8 +191,9 @@ impl Default for JsonEmitter {
 impl JsonEmitter {
     fn emit_node<W: fmt::Write>(&mut self, w: &mut W, node: &Document) -> Result<()> {
         match node {
-            Document::Comment(c) => self.emit_comment(w, c),
+            Document::Comment(c, f) => self.emit_comment(w, c, f),
             Document::String(v, f) => self.emit_string(w, v.as_str(), *f),
+            Document::StaticStr(v, f) => self.emit_string(w, v, *f),
             Document::Boolean(v) => self.emit_boolean(w, *v),
             Document::Int(v) => self.emit_int(w, v),
             Document::Float(v) => self.emit_float(w, *v),
@@ -202,6 +202,12 @@ impl JsonEmitter {
             Document::Bytes(v) => self.emit_bytes(w, v),
             Document::Null => self.emit_null(w),
             Document::Compact(d) => self.emit_compact(w, d),
+            Document::Fragment(ds) => {
+                for d in ds {
+                    self.emit_node(w, d)?;
+                }
+                Ok(())
+            }
         }
     }
 
@@ -249,62 +255,76 @@ impl JsonEmitter {
         Ok(())
     }
 
-    fn emit_mapping<W: fmt::Write>(&mut self, w: &mut W, mapping: &[KeyValue]) -> Result<()> {
+    fn emit_key<W: fmt::Write>(&mut self, w: &mut W, s: &str) -> Result<()> {
+        if self.bare_keys && is_legal_bareword(s) {
+            write!(w, "{}", self.color.key.paint(s))?
+        } else {
+            write!(
+                w,
+                "{}{}{}",
+                self.color.punctuation.paint("\""),
+                self.color.key.paint(s),
+                self.color.punctuation.paint("\"")
+            )?
+        }
+        Ok(())
+    }
+
+    fn emit_mapping<W: fmt::Write>(&mut self, w: &mut W, mapping: &[Document]) -> Result<()> {
         self.level += 1;
         self.writeln(w, &self.color.aggregate.paint("{").to_string())?;
         self.emit_indent(w)?;
-        for (i, KeyValue(key, value, comment)) in mapping.iter().enumerate() {
+        for (i, frag) in mapping.iter().enumerate() {
+            let nodes = frag.fragments()?;
             if i > 0 {
                 self.writeln(w, ",")?;
                 self.emit_indent(w)?;
             }
-            if let Some(c) = comment {
-                self.emit_comment(w, c)?;
-            }
-            match key {
-                Document::String(s, _) => {
-                    if self.bare_keys && is_legal_bareword(s.as_str()) {
-                        write!(w, "{}", self.color.key.paint(s))?
-                    } else {
-                        write!(
-                            w,
-                            "{}{}{}",
-                            self.color.punctuation.paint("\""),
-                            self.color.key.paint(s),
-                            self.color.punctuation.paint("\"")
-                        )?
-                    }
+            let mut key_done = false;
+            for node in nodes {
+                if let Some((c, f)) = node.comment() {
+                    self.emit_comment(w, c, f)?;
+                    continue;
                 }
-                Document::Boolean(v) => write!(
-                    w,
-                    "{}{}{}",
-                    self.color.punctuation.paint("\""),
-                    self.color.key.paint(format!("{}", v)),
-                    self.color.punctuation.paint("\"")
-                )?,
-                Document::Int(v) => write!(
-                    w,
-                    "{}{}{}",
-                    self.color.punctuation.paint("\""),
-                    self.color.key.paint(format!("{}", v)),
-                    self.color.punctuation.paint("\"")
-                )?,
-                Document::Float(v) => write!(
-                    w,
-                    "{}{}{}",
-                    self.color.punctuation.paint("\""),
-                    self.color.key.paint(format!("{}", v)),
-                    self.color.punctuation.paint("\"")
-                )?,
-                Document::Comment(_) => return Err(Error::KeyTypeError("comment")),
-                Document::Mapping(_) => return Err(Error::KeyTypeError("mapping")),
-                Document::Sequence(_) => return Err(Error::KeyTypeError("sequence")),
-                Document::Bytes(_) => return Err(Error::KeyTypeError("bytes")),
-                Document::Compact(_) => return Err(Error::KeyTypeError("compact")),
-                Document::Null => return Err(Error::KeyTypeError("null")),
-            };
-            write!(w, "{}", &self.color.punctuation.paint(": "))?;
-            self.emit_node(w, value)?;
+                if key_done {
+                    self.emit_node(w, node)?;
+                    continue;
+                }
+                match node {
+                    Document::String(s, _) => self.emit_key(w, s.as_str())?,
+                    Document::StaticStr(s, _) => self.emit_key(w, s)?,
+                    Document::Boolean(v) => write!(
+                        w,
+                        "{}{}{}",
+                        self.color.punctuation.paint("\""),
+                        self.color.key.paint(format!("{}", v)),
+                        self.color.punctuation.paint("\"")
+                    )?,
+                    Document::Int(v) => write!(
+                        w,
+                        "{}{}{}",
+                        self.color.punctuation.paint("\""),
+                        self.color.key.paint(format!("{}", v)),
+                        self.color.punctuation.paint("\"")
+                    )?,
+                    Document::Float(v) => write!(
+                        w,
+                        "{}{}{}",
+                        self.color.punctuation.paint("\""),
+                        self.color.key.paint(format!("{}", v)),
+                        self.color.punctuation.paint("\"")
+                    )?,
+                    Document::Comment(_, _) => return Err(Error::KeyTypeError("comment")),
+                    Document::Mapping(_) => return Err(Error::KeyTypeError("mapping")),
+                    Document::Sequence(_) => return Err(Error::KeyTypeError("sequence")),
+                    Document::Bytes(_) => return Err(Error::KeyTypeError("bytes")),
+                    Document::Compact(_) => return Err(Error::KeyTypeError("compact")),
+                    Document::Fragment(_) => return Err(Error::KeyTypeError("fragment")),
+                    Document::Null => return Err(Error::KeyTypeError("null")),
+                };
+                write!(w, "{}", &self.color.punctuation.paint(": "))?;
+                key_done = true;
+            }
         }
         self.writeln(w, "")?;
         self.level -= 1;
@@ -313,11 +333,15 @@ impl JsonEmitter {
         Ok(())
     }
 
-    fn emit_comment<W: fmt::Write>(&mut self, w: &mut W, comment: &DocComment) -> Result<()> {
+    fn emit_comment<W: fmt::Write>(
+        &mut self,
+        w: &mut W,
+        comment: &str,
+        _format: &CommentFormat,
+    ) -> Result<()> {
         if self.comment.is_none() || self.compact {
             return Ok(());
         }
-        let DocComment(comment, _formant) = comment;
         for line in comment.split('\n') {
             if line.is_empty() {
                 writeln!(
@@ -620,7 +644,7 @@ fn is_legal_bareword(word: &str) -> bool {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
     use crate::document::CommentFormat;
 
@@ -646,17 +670,13 @@ mod test {
         Document::String(v.to_string(), StrFormat::Multiline)
     }
     fn comment(v: &str) -> Document {
-        Document::Comment(DocComment(v.to_string(), CommentFormat::Normal))
+        Document::Comment(v.to_string(), CommentFormat::Normal)
     }
-    fn kv(k: &str, v: Document) -> KeyValue {
-        KeyValue(string(k), v, None)
+    fn kv(k: &str, v: Document) -> Document {
+        Document::Fragment(vec![string(k), v])
     }
-    fn kvcomment(k: &str, v: Document, c: &str) -> KeyValue {
-        KeyValue(
-            string(k),
-            v,
-            Some(DocComment(c.to_string(), CommentFormat::Normal)),
-        )
+    fn kvcomment(k: &str, v: Document, c: &str) -> Document {
+        Document::Fragment(vec![comment(c), string(k), v])
     }
     fn nes_address(seg: &str, bank: i32, addr: u32) -> Document {
         Document::Compact(

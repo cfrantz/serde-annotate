@@ -12,6 +12,8 @@ pub enum Error {
     FmtError(std::fmt::Error),
     #[error("Type {0:?} is not valid as a mapping key")]
     KeyTypeError(&'static str),
+    #[error("document structure error: expected {0} but got {1}")]
+    StructureError(&'static str, &'static str),
 }
 
 impl ser::Error for Error {

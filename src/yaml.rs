@@ -1,5 +1,5 @@
 use crate::color::ColorProfile;
-use crate::document::{Comment, Document, KeyValue, StrFormat};
+use crate::document::{CommentFormat, Document, StrFormat};
 use crate::error::Error;
 use crate::integer::Int;
 use std::fmt;
@@ -85,8 +85,9 @@ impl YamlEmitter {
     const SPACE: &'static str = "                                                                                                    ";
     fn emit_node<W: fmt::Write>(&mut self, w: &mut W, node: &Document) -> Result<()> {
         match node {
-            Document::Comment(c) => self.emit_comment(w, c),
+            Document::Comment(c, f) => self.emit_comment(w, c, f),
             Document::String(v, f) => self.emit_string(w, v.as_str(), *f),
+            Document::StaticStr(v, f) => self.emit_string(w, v, *f),
             Document::Boolean(v) => self.emit_boolean(w, *v),
             Document::Int(v) => self.emit_int(w, v),
             Document::Float(v) => self.emit_float(w, *v),
@@ -95,6 +96,12 @@ impl YamlEmitter {
             Document::Bytes(v) => self.emit_bytes(w, v),
             Document::Null => self.emit_null(w),
             Document::Compact(d) => self.emit_compact(w, d),
+            Document::Fragment(ds) => {
+                for d in ds {
+                    self.emit_node(w, d)?;
+                }
+                Ok(())
+            }
         }
     }
 
@@ -180,14 +187,15 @@ impl YamlEmitter {
         Ok(())
     }
 
-    fn emit_mapping<W: fmt::Write>(&mut self, w: &mut W, mapping: &[KeyValue]) -> Result<()> {
+    fn emit_mapping<W: fmt::Write>(&mut self, w: &mut W, mapping: &[Document]) -> Result<()> {
         if self.compact || mapping.is_empty() {
             write!(w, "{}", self.color.aggregate.paint("{"))?;
         } else {
             self.level += 1;
         }
         let mut skip = true;
-        for KeyValue(key, value, comment) in mapping.iter() {
+        for frag in mapping.iter() {
+            let nodes = frag.fragments()?;
             if !skip {
                 if self.compact {
                     write!(w, "{}", self.color.punctuation.paint(", "))?;
@@ -196,14 +204,22 @@ impl YamlEmitter {
                     self.emit_indent(w)?;
                 }
             }
-            if let Some(c) = &comment {
-                self.emit_comment(w, c)?;
+            let mut key_done = false;
+            for node in nodes {
+                if let Some((c, f)) = node.comment() {
+                    self.emit_comment(w, c, f)?;
+                    continue;
+                }
+                if key_done {
+                    self.emit_helper(w, &self.color.punctuation.paint(":").to_string(), node)?;
+                    continue;
+                }
+                let k = self.is_key;
+                self.is_key = true;
+                self.emit_node(w, node)?;
+                self.is_key = k;
+                key_done = true;
             }
-            let k = self.is_key;
-            self.is_key = true;
-            self.emit_node(w, &key)?;
-            self.is_key = k;
-            self.emit_helper(w, &self.color.punctuation.paint(":").to_string(), value)?;
             skip = false;
         }
         if self.compact || mapping.is_empty() {
@@ -214,9 +230,13 @@ impl YamlEmitter {
         Ok(())
     }
 
-    fn emit_comment<W: fmt::Write>(&mut self, w: &mut W, comment: &Comment) -> Result<()> {
+    fn emit_comment<W: fmt::Write>(
+        &mut self,
+        w: &mut W,
+        comment: &str,
+        _format: &CommentFormat,
+    ) -> Result<()> {
         if !self.compact {
-            let Comment(comment, _format) = comment;
             for line in comment.split('\n') {
                 if line.is_empty() {
                     writeln!(w, "{}", &self.color.comment.paint("#").to_string())?;
@@ -474,7 +494,7 @@ fn need_quotes(string: &str) -> bool {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
     use crate::document::CommentFormat;
     use crate::integer::Base;
@@ -501,17 +521,13 @@ mod test {
         Document::String(v.to_string(), StrFormat::Multiline)
     }
     fn comment(v: &str) -> Document {
-        Document::Comment(Comment(v.to_string(), CommentFormat::Normal))
+        Document::Comment(v.to_string(), CommentFormat::Normal)
     }
-    fn kv(k: &str, v: Document) -> KeyValue {
-        KeyValue(string(k), v, None)
+    fn kv(k: &str, v: Document) -> Document {
+        Document::Fragment(vec![string(k), v])
     }
-    fn kvcomment(k: &str, v: Document, c: &str) -> KeyValue {
-        KeyValue(
-            string(k),
-            v,
-            Some(Comment(c.to_string(), CommentFormat::Normal)),
-        )
+    fn kvcomment(k: &str, v: Document, c: &str) -> Document {
+        Document::Fragment(vec![comment(c), string(k), v])
     }
     fn nes_address(seg: &str, bank: i32, addr: u32) -> Document {
         Document::Compact(
