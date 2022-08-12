@@ -1,7 +1,7 @@
 use serde::ser;
 
 use crate::annotate::{Annotate, AnnotateType, Format, MemberId};
-use crate::document::{Comment, CommentFormat, Document, KeyValue, StrFormat};
+use crate::document::{CommentFormat, Document, StrFormat};
 use crate::error::Error;
 use crate::integer::{Base, Int};
 
@@ -25,7 +25,7 @@ pub struct AnnotatedSerializer<'a> {
 impl<'a> AnnotatedSerializer<'a> {
     pub fn new(annotator: Option<&'a dyn Annotate>) -> Self {
         AnnotatedSerializer {
-            annotator: annotator,
+            annotator,
             base: Base::Dec,
             strformat: StrFormat::Standard,
             compact: false,
@@ -62,11 +62,11 @@ impl<'a> AnnotatedSerializer<'a> {
         }
     }
 
-    fn comment(&self, variant: Option<&str>, field: &MemberId) -> Option<Comment> {
+    fn comment(&self, variant: Option<&str>, field: &MemberId) -> Option<Document> {
         self.annotator
             .map(|a| a.comment(variant, field))
             .flatten()
-            .map(|c| Comment(c, CommentFormat::Normal))
+            .map(|c| Document::Comment(c, CommentFormat::Normal))
     }
 
     fn serialize<T>(&self, value: &T, ser: Option<AnnotatedSerializer>) -> Result<Document, Error>
@@ -212,12 +212,14 @@ impl<'s, 'a> ser::Serializer for &'s mut AnnotatedSerializer<'a> {
         } else {
             v
         };
+        let mut nodes = vec![];
+        if let Some(c) = self.comment(Some(variant), &MemberId::Variant) {
+            nodes.push(c);
+        }
+        nodes.push(Document::from(variant));
+        nodes.push(v);
 
-        Ok(Document::Mapping(vec![KeyValue(
-            Document::String(variant.to_string(), StrFormat::Standard),
-            v,
-            self.comment(Some(variant), &MemberId::Variant),
-        )]))
+        Ok(Document::Mapping(vec![Document::Fragment(nodes)]))
     }
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
@@ -356,13 +358,14 @@ impl<'s, 'a> ser::SerializeTupleStruct for SerializeTupleStruct<'s, 'a> {
         T: ?Sized + ser::Serialize,
     {
         let field = MemberId::Index(self.index);
+        let node = self
+            .serializer
+            .serialize(value, self.serializer.annotate(None, &field))?;
         if let Some(c) = self.serializer.comment(None, &field) {
-            self.sequence.push(Document::Comment(c));
+            self.sequence.push(Document::Fragment(vec![c, node]));
+        } else {
+            self.sequence.push(node);
         }
-        self.sequence.push(
-            self.serializer
-                .serialize(value, self.serializer.annotate(None, &field))?,
-        );
         self.index += 1;
         Ok(())
     }
@@ -399,13 +402,14 @@ impl<'s, 'a> ser::SerializeTupleVariant for SerializeTupleVariant<'s, 'a> {
         T: ?Sized + ser::Serialize,
     {
         let field = MemberId::Index(self.index);
+        let node = self
+            .serializer
+            .serialize(value, self.serializer.annotate(Some(self.variant), &field))?;
         if let Some(c) = self.serializer.comment(Some(self.variant), &field) {
-            self.sequence.push(Document::Comment(c));
+            self.sequence.push(Document::Fragment(vec![c, node]));
+        } else {
+            self.sequence.push(node);
         }
-        self.sequence.push(
-            self.serializer
-                .serialize(value, self.serializer.annotate(Some(self.variant), &field))?,
-        );
 
         self.index += 1;
         Ok(())
@@ -421,19 +425,23 @@ impl<'s, 'a> ser::SerializeTupleVariant for SerializeTupleVariant<'s, 'a> {
         } else {
             Document::Sequence(self.sequence)
         };
-        Ok(Document::Mapping(vec![KeyValue(
-            Document::String(self.variant.to_string(), StrFormat::Standard),
-            sequence,
-            self.serializer
-                .comment(Some(self.variant), &MemberId::Variant),
-        )]))
+        let mut nodes = vec![];
+        if let Some(c) = self
+            .serializer
+            .comment(Some(self.variant), &MemberId::Variant)
+        {
+            nodes.push(c);
+        }
+        nodes.push(Document::from(self.variant));
+        nodes.push(sequence);
+        Ok(Document::Mapping(vec![Document::Fragment(nodes)]))
     }
 }
 
 pub struct SerializeMap<'s, 'a> {
     serializer: &'s mut AnnotatedSerializer<'a>,
     next_key: Option<Document>,
-    mapping: Vec<KeyValue>,
+    mapping: Vec<Document>,
 }
 
 impl<'s, 'a> SerializeMap<'s, 'a> {
@@ -468,8 +476,10 @@ impl<'s, 'a> ser::SerializeMap for SerializeMap<'s, 'a> {
     {
         match self.next_key.take() {
             Some(key) => {
-                self.mapping
-                    .push(KeyValue(key, self.serializer.serialize(value, None)?, None))
+                self.mapping.push(Document::Fragment(vec![
+                    key,
+                    self.serializer.serialize(value, None)?,
+                ]));
             }
             None => panic!("serialize_value called before serialize_key"),
         };
@@ -481,18 +491,17 @@ impl<'s, 'a> ser::SerializeMap for SerializeMap<'s, 'a> {
         K: ?Sized + ser::Serialize,
         V: ?Sized + ser::Serialize,
     {
-        self.mapping.push(KeyValue(
+        self.mapping.push(Document::Fragment(vec![
             key.serialize(&mut *self.serializer)?,
             self.serializer.serialize(value, None)?,
-            None,
-        ));
+        ]));
         Ok(())
     }
 }
 
 pub struct SerializeStruct<'s, 'a> {
     serializer: &'s mut AnnotatedSerializer<'a>,
-    mapping: Vec<KeyValue>,
+    mapping: Vec<Document>,
 }
 
 impl<'s, 'a> SerializeStruct<'s, 'a> {
@@ -517,12 +526,16 @@ impl<'s, 'a> ser::SerializeStruct for SerializeStruct<'s, 'a> {
         T: ?Sized + ser::Serialize,
     {
         let field = MemberId::Name(key);
-        self.mapping.push(KeyValue(
-            Document::String(key.to_string(), StrFormat::Standard),
+        let mut nodes = vec![];
+        if let Some(c) = self.serializer.comment(None, &field) {
+            nodes.push(c);
+        }
+        nodes.push(Document::from(key));
+        nodes.push(
             self.serializer
                 .serialize(value, self.serializer.annotate(None, &field))?,
-            self.serializer.comment(None, &field),
-        ));
+        );
+        self.mapping.push(Document::Fragment(nodes));
         Ok(())
     }
 }
@@ -530,7 +543,7 @@ impl<'s, 'a> ser::SerializeStruct for SerializeStruct<'s, 'a> {
 pub struct SerializeStructVariant<'s, 'a> {
     serializer: &'s mut AnnotatedSerializer<'a>,
     variant: &'static str,
-    mapping: Vec<KeyValue>,
+    mapping: Vec<Document>,
 }
 
 impl<'s, 'a> SerializeStructVariant<'s, 'a> {
@@ -557,12 +570,16 @@ impl<'s, 'a> ser::SerializeStructVariant for SerializeStructVariant<'s, 'a> {
         } else {
             Document::Mapping(self.mapping)
         };
-        Ok(Document::Mapping(vec![KeyValue(
-            Document::String(self.variant.to_string(), StrFormat::Standard),
-            mapping,
-            self.serializer
-                .comment(Some(self.variant), &MemberId::Variant),
-        )]))
+        let mut nodes = vec![];
+        if let Some(c) = self
+            .serializer
+            .comment(Some(self.variant), &MemberId::Variant)
+        {
+            nodes.push(c);
+        }
+        nodes.push(Document::from(self.variant));
+        nodes.push(mapping);
+        Ok(Document::Mapping(vec![Document::Fragment(nodes)]))
     }
 
     fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
@@ -570,12 +587,16 @@ impl<'s, 'a> ser::SerializeStructVariant for SerializeStructVariant<'s, 'a> {
         T: ?Sized + ser::Serialize,
     {
         let field = MemberId::Name(key);
-        self.mapping.push(KeyValue(
-            Document::String(key.to_string(), StrFormat::Standard),
+        let mut nodes = vec![];
+        if let Some(c) = self.serializer.comment(None, &field) {
+            nodes.push(c);
+        }
+        nodes.push(Document::from(key));
+        nodes.push(
             self.serializer
                 .serialize(value, self.serializer.annotate(None, &field))?,
-            self.serializer.comment(None, &field),
-        ));
+        );
+        self.mapping.push(Document::Fragment(nodes));
         Ok(())
     }
 }

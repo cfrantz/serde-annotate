@@ -1,6 +1,7 @@
 // Document Enum for serialization
 //
 //
+use crate::error::Error;
 use crate::integer::Int;
 
 /// Represents possible serialized string formats.
@@ -20,17 +21,13 @@ pub enum CommentFormat {
 }
 
 #[derive(Clone, Debug)]
-pub struct Comment(pub String, pub CommentFormat);
-
-#[derive(Clone, Debug)]
-pub struct KeyValue(pub Document, pub Document, pub Option<Comment>);
-
-#[derive(Clone, Debug)]
 pub enum Document {
     // A comment (emitted for humans, ignored by parsers).
-    Comment(Comment),
+    Comment(String, CommentFormat),
     // A string value and its preferred formatting.
     String(String, StrFormat),
+    // A string reference and its preferred formatting.
+    StaticStr(&'static str, StrFormat),
     // A boolean value.
     Boolean(bool),
     // An Integer (signed, unsigned, 8 to 128 bits) and its preferred output form.
@@ -38,7 +35,7 @@ pub enum Document {
     // Floating point types.
     Float(f64),
     // A mapping object (e.g. dict/hash/etc)
-    Mapping(Vec<KeyValue>),
+    Mapping(Vec<Document>),
     // A sequence objecct (e.g. list/array/etc)
     Sequence(Vec<Document>),
     // A special form for bytes objects.
@@ -47,4 +44,61 @@ pub enum Document {
     Null,
     // A hint to the emitter to emit in compact form.
     Compact(Box<Document>),
+    // A fragment holds a set of document nodes that may be useful as an
+    // aggregate, such as Key-Value pairs.
+    Fragment(Vec<Document>),
+}
+
+impl From<&'static str> for Document {
+    fn from(s: &'static str) -> Self {
+        Document::StaticStr(s, StrFormat::Standard)
+    }
+}
+
+impl Document {
+    pub fn variant(&self) -> &'static str {
+        match self {
+            Document::Comment(_, _) => "Comment",
+            Document::String(_, _) => "String",
+            Document::StaticStr(_, _) => "StaticStr",
+            Document::Boolean(_) => "Boolean",
+            Document::Int(_) => "Int",
+            Document::Float(_) => "Float",
+            Document::Mapping(_) => "Mapping",
+            Document::Sequence(_) => "Sequence",
+            Document::Bytes(_) => "Bytes",
+            Document::Null => "Null",
+            Document::Compact(_) => "Compact",
+            Document::Fragment(_) => "Fragment",
+        }
+    }
+
+    pub fn fragments(&self) -> Result<&[Document], Error> {
+        if let Document::Fragment(f) = self {
+            Ok(f)
+        } else {
+            Err(Error::StructureError("Fragment", self.variant()))
+        }
+    }
+
+    pub fn as_kv(&self) -> Result<(&Document, &Document), Error> {
+        let f = self.fragments()?;
+        let kv = f
+            .iter()
+            .filter(|f| f.comment().is_none())
+            .collect::<Vec<_>>();
+        if kv.len() == 2 {
+            Ok((kv[0], kv[1]))
+        } else {
+            Err(Error::StructureError("2 elements", "??"))
+        }
+    }
+
+    pub fn comment(&self) -> Option<(&str, &CommentFormat)> {
+        if let Document::Comment(c, f) = self {
+            Some((c.as_str(), f))
+        } else {
+            None
+        }
+    }
 }
