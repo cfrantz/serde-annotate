@@ -17,6 +17,8 @@ pub enum Error {
     ParseError(#[from] ParseError),
     #[error("document structure error: expected {0} but got {1}")]
     StructureError(&'static str, &'static str),
+    #[error("syntax error: {0}")]
+    SyntaxError(String),
 }
 
 impl ser::Error for Error {

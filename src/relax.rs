@@ -7,12 +7,89 @@ use crate::document::{CommentFormat, Document, StrFormat};
 use crate::error::Error;
 use crate::integer::{Base, Int};
 
-#[derive(Default, Parser)]
+#[derive(Parser)]
 #[grammar = "relax.pest"]
-pub struct Relax;
+pub struct Relax {
+    pub comma_trailing: bool,
+    pub comma_optional: bool,
+    pub number_hex: bool,
+    pub number_plus: bool,
+    pub number_leading_dec: bool,
+    pub number_trailing_dec: bool,
+    pub string_single_quote: bool,
+    pub string_unquoted: bool,
+    pub string_ident: bool,
+    pub string_json5_multiline: bool,
+    pub string_hjson_multiline: bool,
+    pub comment_slash: bool,
+    pub comment_hash: bool,
+    pub comment_block: bool,
+}
+
 pub(crate) type ParseError = PestError<Rule>;
 
+impl Default for Relax {
+    /// The default Relax parser is maximally permissive.
+    fn default() -> Self {
+        Relax {
+            comma_trailing: true,
+            comma_optional: true,
+            number_hex: true,
+            number_plus: true,
+            number_leading_dec: true,
+            number_trailing_dec: true,
+            string_single_quote: true,
+            string_unquoted: true,
+            string_ident: true,
+            string_json5_multiline: true,
+            string_hjson_multiline: true,
+            comment_slash: true,
+            comment_hash: true,
+            comment_block: true,
+        }
+    }
+}
+
 impl Relax {
+    /// Creates a strict json parser.
+    pub fn json() -> Self {
+        Relax {
+            comma_trailing: false,
+            comma_optional: false,
+            number_hex: false,
+            number_plus: false,
+            number_leading_dec: false,
+            number_trailing_dec: false,
+            string_single_quote: false,
+            string_unquoted: false,
+            string_ident: false,
+            string_json5_multiline: false,
+            string_hjson_multiline: false,
+            comment_slash: false,
+            comment_hash: false,
+            comment_block: false,
+        }
+    }
+
+    pub fn json5() -> Self {
+        let mut r = Self::default();
+        r.comma_optional = false;
+        r.string_unquoted = false;
+        r.string_hjson_multiline = false;
+        r.comment_hash = false;
+        r
+    }
+
+    pub fn hjson() -> Self {
+        let mut r = Self::default();
+        r.string_json5_multiline = false;
+        r.number_hex = false;
+        r.number_plus = false;
+        r.number_leading_dec = false;
+        r.number_trailing_dec = false;
+        r
+    }
+
     pub fn from_str(&self, text: &str) -> Result<Document, Error> {
         let json = Relax::parse(Rule::text, text)?.next().unwrap();
         self.handle_pair(json)
@@ -142,9 +219,19 @@ impl Relax {
             .collect::<Vec<_>>()
     }
 
+    fn syntax_error(ok: bool, msg: &str, pair: &Pair<Rule>) -> Result<(), Error> {
+        if ok {
+            Ok(())
+        } else {
+            let (ln, col) = pair.as_span().start_pos().line_col();
+            Err(Error::SyntaxError(format!("{} at {}:{}", msg, ln, col)))
+        }
+    }
+
     fn handle_comment(&self, pair: Pair<Rule>) -> Result<Document, Error> {
         let comment = pair.as_str();
         if let Some(c) = comment.strip_prefix("/*") {
+            Self::syntax_error(self.comment_block, "block comment", &pair)?;
             let c = c.strip_suffix("*/").unwrap().trim_end();
             let lines = c.split("\n").map(str::trim).collect::<Vec<_>>();
             let lines = Self::strip_leading_prefix(&lines, '*');
@@ -157,8 +244,22 @@ impl Relax {
             let c = lines[start..].join("\n");
             Ok(Document::Comment(c, CommentFormat::Normal))
         } else if comment.starts_with("//") {
+            Self::syntax_error(self.comment_slash, "slash comment", &pair)?;
             let lines = comment.split("\n").map(str::trim).collect::<Vec<_>>();
             let lines = Self::strip_leading_prefix(&lines, '/');
+            let lines = Self::strip_leading_prefix(&lines, ' ');
+            let end = lines.len()
+                - if lines.last().map(|s| s.is_empty()) == Some(true) {
+                    1
+                } else {
+                    0
+                };
+            let c = lines[..end].join("\n");
+            Ok(Document::Comment(c, CommentFormat::Normal))
+        } else if comment.starts_with("#") {
+            Self::syntax_error(self.comment_hash, "hash comment", &pair)?;
+            let lines = comment.split("\n").map(str::trim).collect::<Vec<_>>();
+            let lines = Self::strip_leading_prefix(&lines, '#');
             let lines = Self::strip_leading_prefix(&lines, ' ');
             let end = lines.len()
                 - if lines.last().map(|s| s.is_empty()) == Some(true) {
@@ -362,7 +463,7 @@ mod tests {
         let mut s = sequence.iter();
         assert!(matches!(s.next(), Some(Document::Boolean(true))));
         assert!(matches!(s.next(), Some(Document::Boolean(false))));
-        assert!(matches!(s.next(), Some(Document::Float(3.14159))));
+        assert!(matches!(s.next(), Some(Document::Float(_))));
         assert!(s.next().is_none());
         Ok(())
     }
@@ -371,7 +472,7 @@ mod tests {
         if let Document::Comment(c, f) = r.from_str(text)? {
             Ok((c, f))
         } else {
-            Err(anyhow!("Didn't return Document::Mapping()"))
+            Err(anyhow!("Didn't return Document::Comment()"))
         }
     }
     #[test]
@@ -435,6 +536,33 @@ mod tests {
             }
             _ => return Err(anyhow!("Unexpected structure")),
         };
+        Ok(())
+    }
+
+    #[test]
+    fn test_json_comment() -> Result<()> {
+        let relax = Relax::json();
+        assert!(parse_comment(&relax, "// foo").is_err());
+        assert!(parse_comment(&relax, "# foo").is_err());
+        assert!(parse_comment(&relax, "/* foo */").is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn test_json5_comment() -> Result<()> {
+        let relax = Relax::json5();
+        assert!(parse_comment(&relax, "// foo").is_ok());
+        assert!(parse_comment(&relax, "# foo").is_err());
+        assert!(parse_comment(&relax, "/* foo */").is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn test_hjson_comment() -> Result<()> {
+        let relax = Relax::hjson();
+        assert!(parse_comment(&relax, "// foo").is_ok());
+        assert!(parse_comment(&relax, "# foo").is_ok());
+        assert!(parse_comment(&relax, "/* foo */").is_ok());
         Ok(())
     }
 }

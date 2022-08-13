@@ -2,12 +2,21 @@
 // https://spec.json5.org/#lexical-grammar
 
 //COMMENT = { "/*" ~ (!"*/" ~ ANY)* ~ "*/" | "//" ~ (!line_terminator ~ ANY)* }
-COMMENT = { block_comment | slash_comments+ | slash_comment }
+COMMENT = { block_comment | slash_comments | hash_comments }
 
 block_comment = { "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
 slash_comment = { "//" ~ (!line_terminator ~ ANY)* }
 slash_eol = @{ slash_comment ~ line_terminator_sequence ~ WHITESPACE*}
-slash_comments = { slash_eol ~ (slash_eol | slash_comment)+ }
+slash_comments = { 
+    slash_eol ~ (slash_eol | slash_comment)+ |
+    slash_comment
+}
+hash_comment = { "#" ~ (!line_terminator ~ ANY)* }
+hash_eol = @{ hash_comment ~ line_terminator_sequence ~ WHITESPACE*}
+hash_comments = { 
+    hash_eol ~ (hash_eol | hash_comment)+ |
+    hash_comment
+}
 
 WHITESPACE = _{
   "\u{0009}" |
@@ -113,7 +122,7 @@ single_quote_char = _{
 
 string = ${ "\"" ~ double_quote_char* ~ "\"" | "'" ~ single_quote_char* ~ "'" }
 
-text = { SOI ~ value ~ EOI }
+text = { SOI ~ value? ~ EOI }
 
 unicode_escape_sequence = @{ ASCII_HEX_DIGIT{4} }
 
