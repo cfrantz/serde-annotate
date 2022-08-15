@@ -1,6 +1,7 @@
 use pest::error::Error as PestError;
 use pest::iterators::{Pair, Pairs};
 use pest::Parser as P;
+use pest::Position;
 use pest_derive::Parser;
 
 use crate::document::{CommentFormat, Document, StrFormat};
@@ -169,38 +170,55 @@ impl Relax {
         Ok(Document::Fragment(kv))
     }
 
-    fn handle_array_elem(&self, pairs: &mut Pairs<Rule>) -> Result<Document, Error> {
+    fn handle_array_elem(&self, pairs: &mut Pairs<Rule>) -> Result<(Document, bool), Error> {
         let mut i = usize::MAX;
         let mut item = vec![];
+        let mut comma = false;
+        let mut saw_value = false;
         loop {
             let pair = pairs.peek();
             if pair.is_none() {
                 break;
             }
             let pair = pair.unwrap();
-            let (ln, _) = pair.as_span().start_pos().line_col();
-            let node = self.handle_pair(pair)?;
-            let is_comment = node.comment().is_some();
-            if i == usize::MAX {
-                if is_comment {
-                    // Keep
+            let rule = pair.as_rule();
+            if rule == Rule::comma {
+                let _ = pairs.next();
+                comma = true;
+                continue;
+            }
+            let (line, _) = pair.as_span().start_pos().line_col();
+            if rule == Rule::COMMENT {
+                if saw_value {
+                    if i == line {
+                        // Comment is on the same line as the value,
+                        // keep the comment.
+                    } else {
+                        // Comment is not on the same line as the value,
+                        // so exit the loop; the comment belongs to the
+                        // next value.
+                        break;
+                    }
                 } else {
-                    i = ln;
+                    // Comment is before the vale, keep the comment.
                 }
-            } else if is_comment && i == ln {
-                // Keep
+            } else if !saw_value {
+                // If the pair isn't a comment or comma, it must be a value.
+                // Keep the value.
+                i = line;
+                saw_value = true;
             } else {
-                // Don't keep - we're done with this kvpair.
+                // If the pair is a value, but we've already seen a value,
+                // its the next value.  Exit the loop.
                 break;
             }
-            item.push(node);
-            // Advance the iterator.
+            item.push(self.handle_pair(pair)?);
             let _ = pairs.next();
         }
         if item.len() == 1 && item[0].comment().is_none() {
-            Ok(item.pop().unwrap())
+            Ok((item.pop().unwrap(), comma))
         } else {
-            Ok(Document::Fragment(item))
+            Ok((Document::Fragment(item), comma))
         }
     }
 
@@ -219,19 +237,29 @@ impl Relax {
             .collect::<Vec<_>>()
     }
 
-    fn syntax_error(ok: bool, msg: &str, pair: &Pair<Rule>) -> Result<(), Error> {
-        if ok {
-            Ok(())
+    fn syntax_error(err: bool, msg: &str, pos: Position) -> Result<(), Error> {
+        if err {
+            let (ln, col) = pos.line_col();
+            Err(Error::SyntaxError(
+                msg.into(),
+                ln,
+                col,
+                pos.line_of().trim_end().into(),
+                "^",
+            ))
         } else {
-            let (ln, col) = pair.as_span().start_pos().line_col();
-            Err(Error::SyntaxError(format!("{} at {}:{}", msg, ln, col)))
+            Ok(())
         }
     }
 
     fn handle_comment(&self, pair: Pair<Rule>) -> Result<Document, Error> {
         let comment = pair.as_str();
         if let Some(c) = comment.strip_prefix("/*") {
-            Self::syntax_error(self.comment_block, "block comment", &pair)?;
+            Self::syntax_error(
+                !self.comment_block,
+                "block comment",
+                pair.as_span().start_pos(),
+            )?;
             let c = c.strip_suffix("*/").unwrap().trim_end();
             let lines = c.split("\n").map(str::trim).collect::<Vec<_>>();
             let lines = Self::strip_leading_prefix(&lines, '*');
@@ -244,7 +272,11 @@ impl Relax {
             let c = lines[start..].join("\n");
             Ok(Document::Comment(c, CommentFormat::Normal))
         } else if comment.starts_with("//") {
-            Self::syntax_error(self.comment_slash, "slash comment", &pair)?;
+            Self::syntax_error(
+                !self.comment_slash,
+                "slash comment",
+                pair.as_span().start_pos(),
+            )?;
             let lines = comment.split("\n").map(str::trim).collect::<Vec<_>>();
             let lines = Self::strip_leading_prefix(&lines, '/');
             let lines = Self::strip_leading_prefix(&lines, ' ');
@@ -257,7 +289,11 @@ impl Relax {
             let c = lines[..end].join("\n");
             Ok(Document::Comment(c, CommentFormat::Normal))
         } else if comment.starts_with("#") {
-            Self::syntax_error(self.comment_hash, "hash comment", &pair)?;
+            Self::syntax_error(
+                !self.comment_hash,
+                "hash comment",
+                pair.as_span().start_pos(),
+            )?;
             let lines = comment.split("\n").map(str::trim).collect::<Vec<_>>();
             let lines = Self::strip_leading_prefix(&lines, '#');
             let lines = Self::strip_leading_prefix(&lines, ' ');
@@ -299,10 +335,29 @@ impl Relax {
             }
             Rule::array => {
                 let mut pairs = pair.into_inner();
+                let mut npair = pairs.peek();
                 let mut values = Vec::new();
+                let mut saw_comma = false;
+                let mut need_comma = false;
                 while pairs.peek().is_some() {
-                    values.push(self.handle_array_elem(&mut pairs)?);
+                    if !self.comma_optional {
+                        Self::syntax_error(
+                            need_comma ^ saw_comma,
+                            "expected comma",
+                            npair.unwrap().as_span().end_pos(),
+                        )?;
+                    }
+                    npair = pairs.peek();
+                    let (node, comma) = self.handle_array_elem(&mut pairs)?;
+                    values.push(node);
+                    saw_comma = comma;
+                    need_comma = true;
                 }
+                Self::syntax_error(
+                    !self.comma_trailing && saw_comma,
+                    "no comma expected",
+                    npair.unwrap().as_span().end_pos(),
+                )?;
                 Ok(Document::Sequence(values))
             }
             Rule::COMMENT => self.handle_comment(pair),
@@ -563,6 +618,35 @@ mod tests {
         assert!(parse_comment(&relax, "// foo").is_ok());
         assert!(parse_comment(&relax, "# foo").is_ok());
         assert!(parse_comment(&relax, "/* foo */").is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn test_json_commas() -> Result<()> {
+        let relax = Relax::json();
+        assert!(parse_sequence(&relax, "[true, false]").is_ok());
+        assert!(parse_sequence(&relax, "[true, false,]").is_err());
+        let k = parse_sequence(&relax, "[true\nfalse]");
+        println!("k={:?}", k);
+        assert!(parse_sequence(&relax, "[true\nfalse]").is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn test_json5_commas() -> Result<()> {
+        let relax = Relax::json5();
+        assert!(parse_sequence(&relax, "[true, false]").is_ok());
+        assert!(parse_sequence(&relax, "[true, false,]").is_ok());
+        assert!(parse_sequence(&relax, "[true\nfalse]").is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn test_hjson_commas() -> Result<()> {
+        let relax = Relax::hjson();
+        assert!(parse_sequence(&relax, "[true, false]").is_ok());
+        assert!(parse_sequence(&relax, "[true, false,]").is_ok());
+        assert!(parse_sequence(&relax, "[true\nfalse]").is_ok());
         Ok(())
     }
 }
