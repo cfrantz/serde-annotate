@@ -8,13 +8,6 @@ use std::fmt;
 
 type Result<T> = std::result::Result<T, Error>;
 
-/// Comment style to use in JSON documents.
-pub enum Comment {
-    None,
-    Hash,
-    SlashSlash,
-}
-
 /// Multiline string style to use in JSON documents.
 #[derive(Clone, Copy, PartialEq)]
 pub enum Multiline {
@@ -28,7 +21,8 @@ pub struct Json {
     document: Document,
     indent: usize,
     color: ColorProfile,
-    comment: Comment,
+    comment: HashSet<CommentFormat>,
+    standard_comment: CommentFormat,
     bases: HashSet<Base>,
     literals: HashSet<Base>,
     strict_numeric_limits: bool,
@@ -44,10 +38,18 @@ impl Json {
         self
     }
     /// Set the comment style to use in the document.
-    pub fn comment(mut self, c: Comment) -> Self {
-        self.comment = c;
+    pub fn comment(mut self, c: &[CommentFormat]) -> Self {
+        for x in c {
+            self.comment.insert(*x);
+        }
         self
     }
+    /// Set the comment style to use in the document.
+    pub fn standard_comment(mut self, c: CommentFormat) -> Self {
+        self.standard_comment = c;
+        self
+    }
+
     /// Set the allowable bases for integers.
     /// Note: an allowed base that is _not_ allowed for literals will be
     /// emitted as a quoted string.
@@ -103,11 +105,8 @@ impl fmt::Display for Json {
             level: 0,
             indent: self.indent,
             color: self.color,
-            comment: match self.comment {
-                Comment::None => None,
-                Comment::Hash => Some("#".to_string()),
-                Comment::SlashSlash => Some("//".to_string()),
-            },
+            comment: self.comment.clone(),
+            standard_comment: self.standard_comment,
             bases: self.bases.clone(),
             literals: self.literals.clone(),
             strict_numeric_limits: self.strict_numeric_limits,
@@ -126,7 +125,8 @@ impl Document {
             document: self,
             indent: 2,
             color: ColorProfile::default(),
-            comment: Comment::None,
+            comment: HashSet::new(),
+            standard_comment: CommentFormat::SlashSlash,
             bases: HashSet::from([Base::Dec]),
             literals: HashSet::from([Base::Dec]),
             strict_numeric_limits: true,
@@ -141,7 +141,7 @@ impl Document {
     /// multiline strings and bare keys.
     pub fn to_json5(self) -> Json {
         self.to_json()
-            .comment(Comment::SlashSlash)
+            .comment(&[CommentFormat::Block, CommentFormat::SlashSlash])
             .literals(&[Base::Hex])
             .multiline(Multiline::Json5)
             .bare_keys(true)
@@ -152,7 +152,12 @@ impl Document {
     /// Defaults to `#` comments, but hjson also supports `//` comments.
     pub fn to_hjson(self) -> Json {
         self.to_json()
-            .comment(Comment::Hash)
+            .comment(&[
+                CommentFormat::Block,
+                CommentFormat::Hash,
+                CommentFormat::SlashSlash,
+            ])
+            .standard_comment(CommentFormat::Hash)
             .multiline(Multiline::Hjson)
             .bare_keys(true)
     }
@@ -162,7 +167,8 @@ struct JsonEmitter {
     level: usize,
     indent: usize,
     color: ColorProfile,
-    comment: Option<String>,
+    comment: HashSet<CommentFormat>,
+    standard_comment: CommentFormat,
     bases: HashSet<Base>,
     literals: HashSet<Base>,
     strict_numeric_limits: bool,
@@ -176,7 +182,8 @@ impl Default for JsonEmitter {
         JsonEmitter {
             level: 0,
             indent: 2,
-            comment: None,
+            comment: HashSet::new(),
+            standard_comment: CommentFormat::SlashSlash,
             color: ColorProfile::default(),
             bases: HashSet::new(),
             literals: HashSet::new(),
@@ -253,7 +260,7 @@ impl JsonEmitter {
         for (i, value) in sequence.iter().enumerate() {
             if i > 0 && need_eol {
                 write!(w, "{}", if self.compact { " " } else { "\n" })?;
-                if i <= last || self.comment.is_some() {
+                if i <= last || !self.comment.is_empty() {
                     self.emit_indent(w)?;
                 }
                 need_eol = false;
@@ -329,7 +336,7 @@ impl JsonEmitter {
             let nodes = frag.fragments()?;
             if i > 0 && need_eol {
                 write!(w, "{}", if self.compact { " " } else { "\n" })?;
-                if i <= last || self.comment.is_some() {
+                if i <= last || !self.comment.is_empty() {
                     self.emit_indent(w)?;
                 }
                 need_eol = false;
@@ -420,10 +427,20 @@ impl JsonEmitter {
         &mut self,
         w: &mut W,
         comment: &str,
-        _format: &CommentFormat,
+        format: &CommentFormat,
     ) -> Result<bool> {
-        if self.compact || self.comment.is_none() {
+        if self.compact || self.comment.is_empty() {
             return Ok(false);
+        }
+        let format = *self.comment.get(format).unwrap_or(&self.standard_comment);
+        let leader = match format {
+            CommentFormat::SlashSlash | CommentFormat::Standard => "//",
+            CommentFormat::Hash => "#",
+            CommentFormat::Block => " *",
+        };
+        if format == CommentFormat::Block {
+            writeln!(w, "/*")?;
+            self.emit_indent(w)?;
         }
         for (i, line) in comment.split('\n').enumerate() {
             if i > 0 {
@@ -431,22 +448,18 @@ impl JsonEmitter {
                 self.emit_indent(w)?;
             }
             if line.is_empty() {
-                write!(
-                    w,
-                    "{}",
-                    self.color.comment.paint(self.comment.as_ref().unwrap())
-                )?;
+                write!(w, "{}", self.color.comment.paint(leader))?;
             } else {
                 write!(
                     w,
                     "{}",
-                    self.color.comment.paint(format!(
-                        "{} {}",
-                        self.comment.as_ref().unwrap(),
-                        line
-                    ))
+                    self.color.comment.paint(format!("{} {}", leader, line))
                 )?;
             }
+        }
+        if format == CommentFormat::Block {
+            writeln!(w, "*/")?;
+            self.emit_indent(w)?;
         }
         Ok(true)
     }
@@ -756,7 +769,7 @@ mod tests {
         Document::String(v.to_string(), StrFormat::Multiline)
     }
     fn comment(v: &str) -> Document {
-        Document::Comment(v.to_string(), CommentFormat::Normal)
+        Document::Comment(v.to_string(), CommentFormat::Standard)
     }
     fn kv(k: &str, v: Document) -> Document {
         Document::Fragment(vec![string(k), v])
