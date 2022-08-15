@@ -119,6 +119,56 @@ impl Relax {
         }
     }
 
+    fn unhex(ch: char) -> u32 {
+        match ch {
+            '0'..='9' => (ch as u8 - b'0') as u32,
+            'A'..='F' => (ch as u8 - b'A' + 10) as u32,
+            'a'..='f' => (ch as u8 - b'a' + 10) as u32,
+            _ => unreachable!(),
+        }
+    }
+
+    fn unescape(text: &str) -> Result<String, Error> {
+        let mut s = String::with_capacity(text.len());
+        let mut it = text.chars();
+        while let Some(ch) = it.next() {
+            if ch == '\\' {
+                let ch = it.next().unwrap();
+                let decoded = match ch {
+                    '"' => '"',
+                    '/' => '/',
+                    '\\' => '\\',
+                    '\'' => '\'',
+                    'b' => '\x08',
+                    'f' => '\x0c',
+                    'n' => '\n',
+                    'r' => '\r',
+                    't' => '\t',
+                    '\n' => '\n', // json5 multi-line string.
+                    'u' => {
+                        let mut v = 0;
+                        v = (v << 4) | Self::unhex(it.next().unwrap());
+                        v = (v << 4) | Self::unhex(it.next().unwrap());
+                        v = (v << 4) | Self::unhex(it.next().unwrap());
+                        v = (v << 4) | Self::unhex(it.next().unwrap());
+                        char::try_from(v)?
+                    }
+                    'x' => {
+                        let mut v = 0;
+                        v = (v << 4) | Self::unhex(it.next().unwrap());
+                        v = (v << 4) | Self::unhex(it.next().unwrap());
+                        char::try_from(v)?
+                    }
+                    _ => return Err(Error::EscapeError(ch)),
+                };
+                s.push(decoded);
+            } else {
+                s.push(ch);
+            }
+        }
+        Ok(s)
+    }
+
     fn handle_number(&self, pair: Pair<Rule>) -> Result<Document, Error> {
         let text = pair.as_str();
         let mut negative = false;
@@ -423,7 +473,7 @@ impl Relax {
             } else {
                 StrFormat::Standard
             };
-            Ok(Document::String(s.into(), format))
+            Ok(Document::String(Self::unescape(s)?, format))
         } else {
             Self::syntax_error(
                 !self.string_unquoted,
@@ -569,6 +619,15 @@ mod tests {
         let relax = Relax::default();
         let s = parse_string(&relax, r#""foo""#)?;
         assert_eq!(s, "foo");
+        let s = parse_string(&relax, r#" "\"\'\\\/\b\f\n\r\t\u2122\xac" "#)?;
+        assert_eq!(s, "\"'\\/\u{8}\u{c}\n\r\t\u{2122}\u{00ac}");
+        let s = parse_string(&relax, r#" "\e" "#);
+        assert_eq!(s.unwrap_err().to_string(), "unhandled escape: `\\e`");
+        let s = parse_string(&relax, r#" "\uD800" "#);
+        assert_eq!(
+            s.unwrap_err().to_string(),
+            "converted integer out of range for `char`"
+        );
         Ok(())
     }
 
