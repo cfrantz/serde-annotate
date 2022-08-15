@@ -109,7 +109,7 @@ numeric_literal = _{
   "NaN"
 }
 
-object = { "{" ~ "}" | "{" ~ kvpair ~ ("," ~ kvpair)* ~ ","? ~ "}" }
+object = { "{" ~ (kvpair ~ comma?)* ~ "}" }
 
 kvpair = _{ key ~ ":" ~ value }
 
