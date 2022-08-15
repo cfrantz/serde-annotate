@@ -136,38 +136,59 @@ impl Relax {
         }
     }
 
-    fn handle_kvpair(&self, pairs: &mut Pairs<Rule>) -> Result<Document, Error> {
+    fn handle_kvpair(&self, pairs: &mut Pairs<Rule>) -> Result<(Document, bool), Error> {
         let mut k = usize::MAX;
         let mut v = usize::MAX;
         let mut kv = vec![];
+        let mut comma = false;
         loop {
             let pair = pairs.peek();
             if pair.is_none() {
                 break;
             }
             let pair = pair.unwrap();
-            let (ln, _) = pair.as_span().start_pos().line_col();
-            let node = self.handle_pair(pair)?;
-            let is_comment = node.comment().is_some();
-            if k == usize::MAX || v == usize::MAX {
-                if is_comment {
-                    // Keep
-                } else if k == usize::MAX {
-                    k = ln;
+            let rule = pair.as_rule();
+            if rule == Rule::comma {
+                comma = true;
+                let _ = pairs.next();
+                continue;
+            }
+            let (line, _) = pair.as_span().start_pos().line_col();
+            if rule == Rule::COMMENT {
+                if v != usize::MAX {
+                    if v == line {
+                        // Comment on the same line as the value,
+                        // keep the comment.
+                    } else {
+                        // Comment is not on the same line as the value,
+                        // so exit the loop; the comment belongs to the
+                        // next value.
+                        break;
+                    }
                 } else {
-                    v = ln;
+                    // Comment before the value, keep the comment.
                 }
-            } else if is_comment && v == ln {
-                // Keep
+            } else if k == usize::MAX {
+                // If the pair isn't a comment or comma, and we haven't seen
+                // the key, then it must be the key.
+                // Keep it.
+                k = line;
+            } else if v == usize::MAX {
+                // If the pair isn't a comment or comma, and we haven't seen
+                // the value, then it must be the value.
+                // Keep it.
+                v = line;
             } else {
-                // Don't keep - we're done with this kvpair.
+                // If the pair is a not a comment or comma and we've seen both
+                // the key and value, it must be part of the next kvpair.
+                // Exit the loop.
                 break;
             }
-            kv.push(node);
+            kv.push(self.handle_pair(pair)?);
             // Advance the iterator.
             let _ = pairs.next();
         }
-        Ok(Document::Fragment(kv))
+        Ok((Document::Fragment(kv), comma))
     }
 
     fn handle_array_elem(&self, pairs: &mut Pairs<Rule>) -> Result<(Document, bool), Error> {
@@ -200,7 +221,7 @@ impl Relax {
                         break;
                     }
                 } else {
-                    // Comment is before the vale, keep the comment.
+                    // Comment is before the value, keep the comment.
                 }
             } else if !saw_value {
                 // If the pair isn't a comment or comma, it must be a value.
@@ -327,10 +348,29 @@ impl Relax {
             Rule::number => self.handle_number(pair.as_str()),
             Rule::object => {
                 let mut pairs = pair.into_inner();
+                let mut npair = pairs.peek();
                 let mut kvs = Vec::new();
+                let mut saw_comma = false;
+                let mut need_comma = false;
                 while pairs.peek().is_some() {
-                    kvs.push(self.handle_kvpair(&mut pairs)?);
+                    if !self.comma_optional {
+                        Self::syntax_error(
+                            need_comma ^ saw_comma,
+                            "expected comma",
+                            npair.unwrap().as_span().end_pos(),
+                        )?;
+                    }
+                    npair = pairs.peek();
+                    let (node, comma) = self.handle_kvpair(&mut pairs)?;
+                    kvs.push(node);
+                    saw_comma = comma;
+                    need_comma = true;
                 }
+                Self::syntax_error(
+                    !self.comma_trailing && saw_comma,
+                    "no comma expected",
+                    npair.unwrap().as_span().end_pos(),
+                )?;
                 Ok(Document::Mapping(kvs))
             }
             Rule::array => {
@@ -347,6 +387,7 @@ impl Relax {
                             npair.unwrap().as_span().end_pos(),
                         )?;
                     }
+
                     npair = pairs.peek();
                     let (node, comma) = self.handle_array_elem(&mut pairs)?;
                     values.push(node);
@@ -358,6 +399,7 @@ impl Relax {
                     "no comma expected",
                     npair.unwrap().as_span().end_pos(),
                 )?;
+
                 Ok(Document::Sequence(values))
             }
             Rule::COMMENT => self.handle_comment(pair),
@@ -626,9 +668,16 @@ mod tests {
         let relax = Relax::json();
         assert!(parse_sequence(&relax, "[true, false]").is_ok());
         assert!(parse_sequence(&relax, "[true, false,]").is_err());
-        let k = parse_sequence(&relax, "[true\nfalse]");
-        println!("k={:?}", k);
         assert!(parse_sequence(&relax, "[true\nfalse]").is_err());
+
+        assert!(parse_mapping(&relax, r#"{"a": true, "b": false}"#).is_ok());
+        assert!(parse_mapping(&relax, r#"{"a": true, "b": false,}"#).is_err());
+        assert!(parse_mapping(
+            &relax,
+            r#"{"a": true
+                "b": false}"#
+        )
+        .is_err());
         Ok(())
     }
 
@@ -638,6 +687,15 @@ mod tests {
         assert!(parse_sequence(&relax, "[true, false]").is_ok());
         assert!(parse_sequence(&relax, "[true, false,]").is_ok());
         assert!(parse_sequence(&relax, "[true\nfalse]").is_err());
+
+        assert!(parse_mapping(&relax, r#"{"a": true, "b": false}"#).is_ok());
+        assert!(parse_mapping(&relax, r#"{"a": true, "b": false,}"#).is_ok());
+        assert!(parse_mapping(
+            &relax,
+            r#"{"a": true
+                "b": false}"#
+        )
+        .is_err());
         Ok(())
     }
 
@@ -647,6 +705,15 @@ mod tests {
         assert!(parse_sequence(&relax, "[true, false]").is_ok());
         assert!(parse_sequence(&relax, "[true, false,]").is_ok());
         assert!(parse_sequence(&relax, "[true\nfalse]").is_ok());
+
+        assert!(parse_mapping(&relax, r#"{"a": true, "b": false}"#).is_ok());
+        assert!(parse_mapping(&relax, r#"{"a": true, "b": false,}"#).is_ok());
+        assert!(parse_mapping(
+            &relax,
+            r#"{"a": true
+                "b": false}"#
+        )
+        .is_ok());
         Ok(())
     }
 }
