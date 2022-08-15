@@ -331,17 +331,69 @@ impl Relax {
         }
     }
 
+    fn handle_string(&self, pair: Pair<Rule>) -> Result<Document, Error> {
+        let s = pair.as_str();
+        if s.starts_with("'''") {
+            Self::syntax_error(
+                !self.string_hjson_multiline,
+                "unexpected hjson multiline string",
+                pair.as_span().start_pos(),
+            )?;
+            let s = &s[3..(s.len() - 3)].trim();
+            let (_, column) = pair.as_span().start_pos().line_col();
+            let split = column - 1;
+            let mut value = Vec::new();
+            for line in s.split('\n') {
+                if line.len() < split {
+                    value.push(line);
+                } else {
+                    let (space, _) = line.split_at(split);
+                    let space = split - space.trim().len();
+                    let (_, text) = line.split_at(space);
+                    value.push(text);
+                }
+            }
+            Ok(Document::String(value.join("\n"), StrFormat::Standard))
+        } else if s.starts_with('\'') || s.starts_with('"') {
+            Self::syntax_error(
+                !self.string_single_quote && s.starts_with("'"),
+                "single quote",
+                pair.as_span().start_pos(),
+            )?;
+            let s = &s[1..(s.len() - 1)];
+            let json5_line_cont = s.contains("\\\r\n")
+                || s.contains("\\\r")
+                || s.contains("\\\n")
+                || s.contains("\\\u{2028}")
+                || s.contains("\\\u{2029}");
+            Self::syntax_error(
+                !self.string_json5_multiline && json5_line_cont,
+                "unexpected end of line",
+                pair.as_span().start_pos(),
+            )?;
+            Ok(Document::String(s.into(), StrFormat::Standard))
+        } else {
+            Self::syntax_error(
+                !self.string_unquoted,
+                "missing quotes",
+                pair.as_span().start_pos(),
+            )?;
+            Ok(Document::String(s.into(), StrFormat::Standard))
+        }
+    }
+
     fn handle_pair(&self, pair: Pair<Rule>) -> Result<Document, Error> {
         match pair.as_rule() {
             //Rule::value => self.handle_pair(pair.into_inner().next().unwrap()),
             Rule::null => Ok(Document::Null),
             Rule::boolean => Ok(Document::Boolean(pair.as_str().parse().unwrap())),
-            Rule::string => {
-                let s = pair.as_str();
-                let end = s.len() - 1;
-                Ok(Document::String(s[1..end].into(), StrFormat::Standard))
-            }
+            Rule::string => self.handle_string(pair),
             Rule::identifier => {
+                Self::syntax_error(
+                    !self.string_ident,
+                    "missing quotes",
+                    pair.as_span().start_pos(),
+                )?;
                 // TODO: add StrFormat::Unquoted
                 Ok(Document::String(pair.as_str().into(), StrFormat::Standard))
             }
@@ -513,7 +565,9 @@ mod tests {
     }
 
     fn parse_mapping(r: &Relax, text: &str) -> Result<Vec<Document>> {
-        if let Document::Mapping(m) = r.from_str(text)? {
+        let doc = r.from_str(text);
+        println!("mapping = {:?}", doc);
+        if let Document::Mapping(m) = doc? {
             Ok(m)
         } else {
             Err(anyhow!("Didn't return Document::Mapping()"))
@@ -566,7 +620,8 @@ mod tests {
     }
 
     fn parse_comment(r: &Relax, text: &str) -> Result<(String, CommentFormat)> {
-        if let Document::Comment(c, f) = r.from_str(text)? {
+        let doc = r.from_str(text)?;
+        if let Document::Comment(c, f) = doc {
             Ok((c, f))
         } else {
             Err(anyhow!("Didn't return Document::Comment()"))
@@ -712,6 +767,81 @@ mod tests {
             &relax,
             r#"{"a": true
                 "b": false}"#
+        )
+        .is_ok());
+        Ok(())
+    }
+
+    #[test]
+    fn test_json_simple_string() -> Result<()> {
+        let relax = Relax::json();
+        assert!(parse_string(&relax, r#""foo""#).is_ok());
+        assert!(parse_string(&relax, r#"'foo'"#).is_err());
+        assert!(parse_string(&relax, "foo bar baz").is_err());
+        assert!(parse_mapping(&relax, "{a: true}").is_err());
+        assert!(parse_string(
+            &relax,
+            r#""foo\
+            bar""#
+        )
+        .is_err());
+        assert!(parse_string(
+            &relax,
+            r#"
+            '''
+            "Weird Al"
+            Yankovic!
+            '''"#
+        )
+        .is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn test_json5_string() -> Result<()> {
+        let relax = Relax::json5();
+        assert!(parse_string(&relax, r#""foo""#).is_ok());
+        assert!(parse_string(&relax, r#"'foo'"#).is_ok());
+        assert!(parse_string(&relax, "foo bar baz").is_err());
+        assert!(parse_mapping(&relax, "{a: true}").is_ok());
+        assert!(parse_string(
+            &relax,
+            r#""foo\
+            bar""#
+        )
+        .is_ok());
+        assert!(parse_string(
+            &relax,
+            r#"
+            '''
+            "Weird Al"
+            Yankovic!
+            '''"#
+        )
+        .is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn test_hjson_string() -> Result<()> {
+        let relax = Relax::hjson();
+        assert!(parse_string(&relax, r#""foo""#).is_ok());
+        assert!(parse_string(&relax, r#"'foo'"#).is_ok());
+        assert!(parse_string(&relax, "foo bar baz").is_ok());
+        assert!(parse_mapping(&relax, "{a: true}").is_ok());
+        assert!(parse_string(
+            &relax,
+            r#""foo\
+            bar""#
+        )
+        .is_err());
+        assert!(parse_string(
+            &relax,
+            r#"
+            '''
+            "Weird Al"
+            Yankovic!
+            '''"#
         )
         .is_ok());
         Ok(())

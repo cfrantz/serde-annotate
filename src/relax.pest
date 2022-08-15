@@ -67,6 +67,9 @@ hex_escape_sequence = @{ ASCII_HEX_DIGIT{2} }
 
 hex_integer_literal = _{ ^"0x" ~ ASCII_HEX_DIGIT+ }
 
+hjson_punctuator = { "{" | "}" | "[" | "]" | "," | ":" | "/*" | "//" | "#" }
+hjson_unquoted_string = @{ !hjson_punctuator ~ (!line_terminator ~ ANY)+ }
+
 identifier = ${ identifier_start ~ identifier_part* }
 
 identifier_part = _{
@@ -121,7 +124,14 @@ single_quote_char = _{
   !"'" ~ char_literal
 }
 
-string = ${ "\"" ~ double_quote_char* ~ "\"" | "'" ~ single_quote_char* ~ "'" }
+hjson_multiline_string = @{ "'''" ~ (!"'''" ~ ANY)* ~ "'''" }
+
+string = ${
+    hjson_multiline_string |
+    "'" ~ single_quote_char* ~ "'" |
+    "\"" ~ double_quote_char* ~ "\"" |
+    hjson_unquoted_string
+}
 
 text = { SOI ~ value? ~ EOI }
 
@@ -136,4 +146,4 @@ unicode_letter = _{
   LETTER_NUMBER
 }
 
-value = _{ null | boolean | string | number | object | array }
+value = _{ null | boolean | number | object | array | string }
