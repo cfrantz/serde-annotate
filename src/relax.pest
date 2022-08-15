@@ -66,6 +66,8 @@ exponent_part = _{ ^"e" ~ ("+" | "-")? ~ ASCII_DIGIT+ }
 hex_escape_sequence = @{ ASCII_HEX_DIGIT{2} }
 
 hex_integer_literal = _{ ^"0x" ~ ASCII_HEX_DIGIT+ }
+bin_integer_literal = _{ ^"0b" ~ ('0'..'1')+ }
+oct_integer_literal = _{ ^"0o" ~ ('0'..'7')+ }
 
 hjson_punctuator = { "{" | "}" | "[" | "]" | "," | ":" | "/*" | "//" | "#" }
 hjson_unquoted_string = @{ !hjson_punctuator ~ (!line_terminator ~ ANY)+ }
@@ -106,7 +108,9 @@ null = @{ "null" }
 number = @{ ("+" | "-")? ~ numeric_literal }
 
 numeric_literal = _{
+  bin_integer_literal |
   hex_integer_literal |
+  oct_integer_literal |
   decimal_literal |
   "Infinity" |
   "NaN"
