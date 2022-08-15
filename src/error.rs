@@ -1,5 +1,6 @@
 use crate::relax::ParseError;
 use serde::ser;
+use std::char::CharTryFromError;
 use std::fmt::Display;
 use thiserror::Error;
 
@@ -9,12 +10,16 @@ pub enum Error {
     Ser(String),
     #[error("unknown error: {0}")]
     Unknown(String),
+    #[error("unhandled escape: `\\{0}`")]
+    EscapeError(char),
     #[error("formatter error: {0:?}")]
     FmtError(std::fmt::Error),
     #[error("Type {0:?} is not valid as a mapping key")]
     KeyTypeError(&'static str),
     #[error(transparent)]
     ParseError(#[from] ParseError),
+    #[error(transparent)]
+    CharTryFromError(#[from] CharTryFromError),
     #[error("document structure error: expected {0} but got {1}")]
     StructureError(&'static str, &'static str),
     #[error("syntax error: {0} at {1}:{2}\n| {3}\n| {4:>2$}")]
