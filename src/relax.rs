@@ -13,10 +13,11 @@ use crate::integer::{Base, Int};
 pub struct Relax {
     pub comma_trailing: bool,
     pub comma_optional: bool,
+    pub number_bin: bool,
     pub number_hex: bool,
+    pub number_oct: bool,
     pub number_plus: bool,
-    pub number_leading_dec: bool,
-    pub number_trailing_dec: bool,
+    pub number_lax_dec_point: bool,
     pub string_single_quote: bool,
     pub string_unquoted: bool,
     pub string_ident: bool,
@@ -35,10 +36,11 @@ impl Default for Relax {
         Relax {
             comma_trailing: true,
             comma_optional: true,
+            number_bin: true,
             number_hex: true,
+            number_oct: true,
             number_plus: true,
-            number_leading_dec: true,
-            number_trailing_dec: true,
+            number_lax_dec_point: true,
             string_single_quote: true,
             string_unquoted: true,
             string_ident: true,
@@ -57,10 +59,11 @@ impl Relax {
         Relax {
             comma_trailing: false,
             comma_optional: false,
+            number_bin: false,
             number_hex: false,
+            number_oct: false,
             number_plus: false,
-            number_leading_dec: false,
-            number_trailing_dec: false,
+            number_lax_dec_point: false,
             string_single_quote: false,
             string_unquoted: false,
             string_ident: false,
@@ -78,16 +81,19 @@ impl Relax {
         r.string_unquoted = false;
         r.string_hjson_multiline = false;
         r.comment_hash = false;
+        r.number_bin = false;
+        r.number_oct = false;
         r
     }
 
     pub fn hjson() -> Self {
         let mut r = Self::default();
         r.string_json5_multiline = false;
+        r.number_bin = false;
         r.number_hex = false;
+        r.number_oct = false;
         r.number_plus = false;
-        r.number_leading_dec = false;
-        r.number_trailing_dec = false;
+        r.number_lax_dec_point = false;
         r
     }
 
@@ -96,9 +102,28 @@ impl Relax {
         self.handle_pair(json)
     }
 
-    fn handle_number(&self, text: &str) -> Result<Document, Error> {
+    fn from_str_radix(text: &str, radix: u32, negative: bool) -> Result<Document, Error> {
+        let base = match radix {
+            2 => Base::Bin,
+            8 => Base::Oct,
+            10 => Base::Dec,
+            16 => Base::Hex,
+            _ => return Err(Error::Unknown(format!("invalid base {}", radix))),
+        };
+        let val = u128::from_str_radix(text, radix).unwrap();
+        if negative {
+            let val = -(val as i128);
+            return Ok(Document::Int(Int::new(val, base)));
+        } else {
+            return Ok(Document::Int(Int::new(val, base)));
+        }
+    }
+
+    fn handle_number(&self, pair: Pair<Rule>) -> Result<Document, Error> {
+        let text = pair.as_str();
         let mut negative = false;
         let t = if let Some(t) = text.strip_prefix('+') {
+            Self::syntax_error(!self.number_plus, "leading `+`", pair.as_span().start_pos())?;
             t
         } else if let Some(t) = text.strip_prefix('-') {
             negative = true;
@@ -108,14 +133,28 @@ impl Relax {
         };
         if t.starts_with("0x") || t.starts_with("0X") {
             // Hexadecimal integer.
-            let (_, t) = t.split_at(2);
-            let val = u128::from_str_radix(t, 16).unwrap();
-            if negative {
-                let val = -(val as i128);
-                return Ok(Document::Int(Int::new(val, Base::Hex)));
-            } else {
-                return Ok(Document::Int(Int::new(val, Base::Hex)));
-            }
+            Self::syntax_error(
+                !self.number_hex,
+                "hexadecimal literal",
+                pair.as_span().start_pos(),
+            )?;
+            return Self::from_str_radix(&t[2..], 16, negative);
+        } else if t.starts_with("0b") || t.starts_with("0B") {
+            // Hexadecimal integer.
+            Self::syntax_error(
+                !self.number_bin,
+                "binary literal",
+                pair.as_span().start_pos(),
+            )?;
+            return Self::from_str_radix(&t[2..], 2, negative);
+        } else if t.starts_with("0o") || t.starts_with("0O") {
+            // Hexadecimal integer.
+            Self::syntax_error(
+                !self.number_oct,
+                "octal literal",
+                pair.as_span().start_pos(),
+            )?;
+            return Self::from_str_radix(&t[2..], 8, negative);
         } else if t.contains('.')
             || t.contains('e')
             || t.contains('E')
@@ -123,9 +162,16 @@ impl Relax {
             || t == "Infinity"
         {
             // Floating point number.
+            Self::syntax_error(
+                !self.number_lax_dec_point && (t.starts_with('.') || t.ends_with('.')),
+                "bad float literal",
+                pair.as_span().start_pos(),
+            )?;
             return Ok(Document::Float(text.parse().unwrap()));
         } else {
             // Decimal integer.
+            return Self::from_str_radix(t, 10, negative);
+            /*
             let val = u128::from_str_radix(t, 10).unwrap();
             if negative {
                 let val = -(val as i128);
@@ -133,6 +179,7 @@ impl Relax {
             } else {
                 return Ok(Document::Int(Int::new(val, Base::Dec)));
             }
+            */
         }
     }
 
@@ -397,7 +444,7 @@ impl Relax {
                 // TODO: add StrFormat::Unquoted
                 Ok(Document::String(pair.as_str().into(), StrFormat::Standard))
             }
-            Rule::number => self.handle_number(pair.as_str()),
+            Rule::number => self.handle_number(pair),
             Rule::object => {
                 let mut pairs = pair.into_inner();
                 let mut npair = pairs.peek();
@@ -533,12 +580,30 @@ mod tests {
     }
 
     #[test]
+    fn test_number_bin() -> Result<()> {
+        let relax = Relax::default();
+        let i = parse_integer(&relax, "0b10100101")?;
+        assert_eq!(i, 0xA5);
+        let i = parse_integer(&relax, "-0b11111111")?;
+        assert_eq!(i, -255);
+        Ok(())
+    }
+    #[test]
     fn test_number_hex() -> Result<()> {
         let relax = Relax::default();
         let i = parse_integer(&relax, "0x1234")?;
         assert_eq!(i, 0x1234);
         let i = parse_integer(&relax, "-0x5678")?;
         assert_eq!(i, -0x5678);
+        Ok(())
+    }
+    #[test]
+    fn test_number_oct() -> Result<()> {
+        let relax = Relax::default();
+        let i = parse_integer(&relax, "0o755")?;
+        assert_eq!(i, 0o755);
+        let i = parse_integer(&relax, "-0o100")?;
+        assert_eq!(i, -64);
         Ok(())
     }
 
