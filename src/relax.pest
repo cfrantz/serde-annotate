@@ -1,7 +1,6 @@
 // see https://spec.json5.org/#syntactic-grammar and
 // https://spec.json5.org/#lexical-grammar
 
-//COMMENT = { "/*" ~ (!"*/" ~ ANY)* ~ "*/" | "//" ~ (!line_terminator ~ ANY)* }
 COMMENT = { block_comment | slash_comments | hash_comments }
 
 block_comment = { "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
@@ -29,7 +28,9 @@ WHITESPACE = _{
   line_terminator
 }
 
-array = { "[" ~ "]" | "[" ~ value ~ ("," ~ value)* ~ ","? ~ "]" }
+comma = {","}
+
+array = { "[" ~ (value ~ comma?)* ~ "]" }
 
 boolean = @{ "true" | "false" }
 
