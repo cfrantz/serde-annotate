@@ -328,7 +328,9 @@ impl YamlEmitter {
         match f {
             StrFormat::Multiline => self.emit_string_multiline(w, value)?,
             StrFormat::Quoted => self.escape_str(w, value, true)?,
-            StrFormat::Standard => self.escape_str(w, value, need_quotes(value))?,
+            StrFormat::Unquoted | StrFormat::Standard => {
+                self.escape_str(w, value, need_quotes(value))?
+            }
         }
         Ok(())
     }
@@ -560,6 +562,8 @@ fn need_quotes(string: &str) -> bool {
         .contains(&string)
         || string.starts_with('.')
         || string.starts_with("0x")
+        || string.starts_with("0b")
+        || string.starts_with("0o")
         || string.parse::<i64>().is_ok()
         || string.parse::<f64>().is_ok()
 }
@@ -592,7 +596,7 @@ mod tests {
         Document::String(v.to_string(), StrFormat::Multiline)
     }
     fn comment(v: &str) -> Document {
-        Document::Comment(v.to_string(), CommentFormat::Normal)
+        Document::Comment(v.to_string(), CommentFormat::Standard)
     }
     fn kv(k: &str, v: Document) -> Document {
         Document::Fragment(vec![string(k), v])

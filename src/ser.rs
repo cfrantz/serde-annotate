@@ -66,7 +66,7 @@ impl<'a> AnnotatedSerializer<'a> {
         self.annotator
             .map(|a| a.comment(variant, field))
             .flatten()
-            .map(|c| Document::Comment(c, CommentFormat::Normal))
+            .map(|c| Document::Comment(c, CommentFormat::Standard))
     }
 
     fn serialize<T>(&self, value: &T, ser: Option<AnnotatedSerializer>) -> Result<Document, Error>

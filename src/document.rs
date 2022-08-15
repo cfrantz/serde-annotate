@@ -6,19 +6,28 @@ use crate::integer::Int;
 use crate::relax::Relax;
 
 /// Represents possible serialized string formats.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum StrFormat {
     /// The standard format for the serialization backend.
     Standard,
     /// Always quote the string, even if not required by the backend.
     Quoted,
+    /// Render the string unquoted if allowed by the backend.
+    Unquoted,
     /// Format the string as a multiline block, if allowed by the backend.
     Multiline,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CommentFormat {
-    Normal,
+    /// The standard format for the serialization backend.
+    Standard,
+    /// Render comments in block form if allowed by the backend.
+    Block,
+    /// Render comments in single-line hash form if allowed by the backend.
+    Hash,
+    /// Render comments in single-line slash-slash form if allowed by the backend.
+    SlashSlash,
 }
 
 #[derive(Clone, Debug)]

@@ -338,7 +338,7 @@ impl Relax {
                 0
             };
             let c = lines[start..].join("\n");
-            Ok(Document::Comment(c, CommentFormat::Normal))
+            Ok(Document::Comment(c, CommentFormat::Block))
         } else if comment.starts_with("//") {
             Self::syntax_error(
                 !self.comment_slash,
@@ -355,7 +355,7 @@ impl Relax {
                     0
                 };
             let c = lines[..end].join("\n");
-            Ok(Document::Comment(c, CommentFormat::Normal))
+            Ok(Document::Comment(c, CommentFormat::SlashSlash))
         } else if comment.starts_with("#") {
             Self::syntax_error(
                 !self.comment_hash,
@@ -372,7 +372,7 @@ impl Relax {
                     0
                 };
             let c = lines[..end].join("\n");
-            Ok(Document::Comment(c, CommentFormat::Normal))
+            Ok(Document::Comment(c, CommentFormat::Hash))
         } else {
             Err(Error::Unknown(comment.into()))
         }
@@ -400,7 +400,7 @@ impl Relax {
                     value.push(text);
                 }
             }
-            Ok(Document::String(value.join("\n"), StrFormat::Standard))
+            Ok(Document::String(value.join("\n"), StrFormat::Multiline))
         } else if s.starts_with('\'') || s.starts_with('"') {
             Self::syntax_error(
                 !self.string_single_quote && s.starts_with("'"),
@@ -418,14 +418,19 @@ impl Relax {
                 "unexpected end of line",
                 pair.as_span().start_pos(),
             )?;
-            Ok(Document::String(s.into(), StrFormat::Standard))
+            let format = if json5_line_cont {
+                StrFormat::Multiline
+            } else {
+                StrFormat::Standard
+            };
+            Ok(Document::String(s.into(), format))
         } else {
             Self::syntax_error(
                 !self.string_unquoted,
                 "missing quotes",
                 pair.as_span().start_pos(),
             )?;
-            Ok(Document::String(s.into(), StrFormat::Standard))
+            Ok(Document::String(s.into(), StrFormat::Unquoted))
         }
     }
 
@@ -442,7 +447,7 @@ impl Relax {
                     pair.as_span().start_pos(),
                 )?;
                 // TODO: add StrFormat::Unquoted
-                Ok(Document::String(pair.as_str().into(), StrFormat::Standard))
+                Ok(Document::String(pair.as_str().into(), StrFormat::Unquoted))
             }
             Rule::number => self.handle_number(pair),
             Rule::object => {
@@ -465,11 +470,13 @@ impl Relax {
                     saw_comma = comma;
                     need_comma = true;
                 }
-                Self::syntax_error(
-                    !self.comma_trailing && saw_comma,
-                    "no comma expected",
-                    npair.unwrap().as_span().end_pos(),
-                )?;
+                if npair.is_some() {
+                    Self::syntax_error(
+                        !self.comma_trailing && saw_comma,
+                        "no comma expected",
+                        npair.unwrap().as_span().end_pos(),
+                    )?;
+                }
                 Ok(Document::Mapping(kvs))
             }
             Rule::array => {
@@ -493,11 +500,13 @@ impl Relax {
                     saw_comma = comma;
                     need_comma = true;
                 }
-                Self::syntax_error(
-                    !self.comma_trailing && saw_comma,
-                    "no comma expected",
-                    npair.unwrap().as_span().end_pos(),
-                )?;
+                if npair.is_some() {
+                    Self::syntax_error(
+                        !self.comma_trailing && saw_comma,
+                        "no comma expected",
+                        npair.unwrap().as_span().end_pos(),
+                    )?;
+                }
 
                 Ok(Document::Sequence(values))
             }
