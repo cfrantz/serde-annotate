@@ -3,14 +3,21 @@ use pest::iterators::{Pair, Pairs};
 use pest::Parser as P;
 use pest::Position;
 use pest_derive::Parser;
+use std::cell::RefCell;
 
 use crate::document::{CommentFormat, Document, StrFormat};
 use crate::error::Error;
 use crate::integer::{Base, Int};
 
+#[derive(Default)]
+struct Inner {
+    lines: Vec<usize>,
+}
+
 #[derive(Parser)]
 #[grammar = "relax.pest"]
 pub struct Relax {
+    inner: RefCell<Inner>,
     pub comma_trailing: bool,
     pub comma_optional: bool,
     pub number_bin: bool,
@@ -34,6 +41,7 @@ impl Default for Relax {
     /// The default Relax parser is maximally permissive.
     fn default() -> Self {
         Relax {
+            inner: Default::default(),
             comma_trailing: true,
             comma_optional: true,
             number_bin: true,
@@ -57,6 +65,7 @@ impl Relax {
     /// Creates a strict json parser.
     pub fn json() -> Self {
         Relax {
+            inner: Default::default(),
             comma_trailing: false,
             comma_optional: false,
             number_bin: false,
@@ -98,8 +107,31 @@ impl Relax {
     }
 
     pub fn from_str(&self, text: &str) -> Result<Document, Error> {
+        // Iterate of the input text and remember the line breaks. Since we use
+        // positioning information infer which comments belong with which json
+        // items, caching the line-number information speeds up parsing
+        // quite a bit.
+        let mut inner = Inner::default();
+        inner.lines.push(0);
+        for (i, ch) in text.char_indices() {
+            if ch == '\n' {
+                inner.lines.push(i);
+            }
+        }
+        inner.lines.push(usize::MAX);
+        self.inner.replace(inner);
         let json = Relax::parse(Rule::text, text)?.next().unwrap();
         self.handle_pair(json)
+    }
+
+    fn line_col(&self, pos: usize) -> (usize, usize) {
+        let inner = self.inner.borrow();
+        let line = match inner.lines.binary_search(&pos) {
+            Ok(i) => i,
+            Err(i) => i - 1,
+        };
+        let col = pos - inner.lines[line];
+        (line, col)
     }
 
     fn from_str_radix(text: &str, radix: u32, negative: bool) -> Result<Document, Error> {
@@ -254,7 +286,7 @@ impl Relax {
                 let _ = pairs.next();
                 continue;
             }
-            let (line, _) = pair.as_span().start_pos().line_col();
+            let (line, _) = self.line_col(pair.as_span().start());
             if rule == Rule::COMMENT {
                 if v != usize::MAX {
                     if v == line {
@@ -309,7 +341,7 @@ impl Relax {
                 comma = true;
                 continue;
             }
-            let (line, _) = pair.as_span().start_pos().line_col();
+            let (line, _) = self.line_col(pair.as_span().start());
             if rule == Rule::COMMENT {
                 if saw_value {
                     if i == line {
@@ -441,7 +473,7 @@ impl Relax {
                 pair.as_span().start_pos(),
             )?;
             let s = &s[3..(s.len() - 3)].trim();
-            let (_, column) = pair.as_span().start_pos().line_col();
+            let (_, column) = self.line_col(pair.as_span().start());
             let split = column - 1;
             let mut value = Vec::new();
             for line in s.split('\n') {
