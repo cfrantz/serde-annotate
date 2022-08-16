@@ -7,7 +7,7 @@ use std::cell::RefCell;
 
 use crate::document::{CommentFormat, Document, StrFormat};
 use crate::error::Error;
-use crate::integer::{Base, Int};
+use crate::integer::Int;
 
 #[derive(Default)]
 struct Inner {
@@ -134,27 +134,6 @@ impl Relax {
         (line, col)
     }
 
-    fn from_str_radix(text: &str, radix: u32, negative: bool) -> Result<Document, Error> {
-        let (base, t) = match radix {
-            2 => (Base::Bin, &text[2..]),
-            8 => (Base::Oct, &text[2..]),
-            10 => (Base::Dec, text),
-            16 => (Base::Hex, &text[2..]),
-            _ => return Err(Error::Unknown(format!("invalid base {}", radix))),
-        };
-        match u128::from_str_radix(t, radix) {
-            Ok(val) => {
-                if negative {
-                    let val = -(val as i128);
-                    return Ok(Document::Int(Int::new(val, base)));
-                } else {
-                    return Ok(Document::Int(Int::new(val, base)));
-                }
-            }
-            Err(_) => Ok(Document::String(text.into(), StrFormat::Standard)),
-        }
-    }
-
     fn unhex(ch: char) -> u32 {
         match ch {
             '0'..='9' => (ch as u8 - b'0') as u32,
@@ -205,14 +184,19 @@ impl Relax {
         Ok(s)
     }
 
+    fn from_str_radix(text: &str, radix: u32) -> Result<Document, Error> {
+        match Int::from_str_radix(text, radix) {
+            Ok(val) => Ok(Document::Int(val)),
+            Err(_) => Ok(Document::String(text.into(), StrFormat::Standard)),
+        }
+    }
+
     fn handle_number(&self, pair: Pair<Rule>) -> Result<Document, Error> {
         let text = pair.as_str();
-        let mut negative = false;
         let t = if let Some(t) = text.strip_prefix('+') {
             Self::syntax_error(!self.number_plus, "leading `+`", pair.as_span().start_pos())?;
             t
         } else if let Some(t) = text.strip_prefix('-') {
-            negative = true;
             t
         } else {
             text
@@ -224,23 +208,23 @@ impl Relax {
                 "hexadecimal literal",
                 pair.as_span().start_pos(),
             )?;
-            return Self::from_str_radix(&t, 16, negative);
+            return Self::from_str_radix(text, 16);
         } else if t.starts_with("0b") || t.starts_with("0B") {
-            // Hexadecimal integer.
+            // Binary integer.
             Self::syntax_error(
                 !self.number_bin,
                 "binary literal",
                 pair.as_span().start_pos(),
             )?;
-            return Self::from_str_radix(&t, 2, negative);
+            return Self::from_str_radix(text, 2);
         } else if t.starts_with("0o") || t.starts_with("0O") {
-            // Hexadecimal integer.
+            // Octal integer.
             Self::syntax_error(
                 !self.number_oct,
                 "octal literal",
                 pair.as_span().start_pos(),
             )?;
-            return Self::from_str_radix(&t, 8, negative);
+            return Self::from_str_radix(text, 8);
         } else if t.contains('.')
             || t.contains('e')
             || t.contains('E')
@@ -256,16 +240,7 @@ impl Relax {
             return Ok(Document::Float(text.parse().unwrap()));
         } else {
             // Decimal integer.
-            return Self::from_str_radix(t, 10, negative);
-            /*
-            let val = u128::from_str_radix(t, 10).unwrap();
-            if negative {
-                let val = -(val as i128);
-                return Ok(Document::Int(Int::new(val, Base::Dec)));
-            } else {
-                return Ok(Document::Int(Int::new(val, Base::Dec)));
-            }
-            */
+            return Self::from_str_radix(text, 10);
         }
     }
 

@@ -2,13 +2,15 @@
 //
 use num_traits::int::PrimInt;
 use std::fmt;
+use std::num::ParseIntError;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[repr(u32)]
 pub enum Base {
-    Bin,
-    Dec,
-    Hex,
-    Oct,
+    Bin = 2,
+    Oct = 8,
+    Dec = 10,
+    Hex = 16,
 }
 
 #[derive(Clone, Debug)]
@@ -114,6 +116,21 @@ impl IntValue {
             IntValue::I128(v) => Self::convert(*v, base, bitwidth),
         }
     }
+
+    pub fn negate(self) -> Self {
+        match self {
+            IntValue::U8(v) => IntValue::I16(-(v as i16)),
+            IntValue::U16(v) => IntValue::I32(-(v as i32)),
+            IntValue::U32(v) => IntValue::I64(-(v as i64)),
+            IntValue::U64(v) => IntValue::I128(-(v as i128)),
+            IntValue::U128(v) => IntValue::I128(-(v as i128)),
+            IntValue::I8(v) => IntValue::I8(-v),
+            IntValue::I16(v) => IntValue::I16(-v),
+            IntValue::I32(v) => IntValue::I32(-v),
+            IntValue::I64(v) => IntValue::I64(-v),
+            IntValue::I128(v) => IntValue::I128(-v),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -159,6 +176,49 @@ impl Int {
     pub fn format(&self, base: Option<&Base>) -> String {
         self.value.format(*base.unwrap_or(&Base::Dec), self.width)
     }
+
+    fn strip_numeric_prefix<'a>(src: &'a str, ch: u8) -> &'a str {
+        let lo = ['0', (ch | 0x20) as char];
+        let up = ['0', (ch & !0x20) as char];
+        if src.starts_with(&lo) || src.starts_with(&up) {
+            &src[2..]
+        } else {
+            src
+        }
+    }
+    fn detect_numeric_prefix<'a>(src: &'a str) -> (Base, &'a str) {
+        let bytes = src.as_bytes();
+        if src.len() >= 2 && bytes[0] == b'0' {
+            match bytes[1] {
+                b'b' | b'B' => (Base::Bin, &src[2..]),
+                b'o' | b'O' => (Base::Oct, &src[2..]),
+                b'x' | b'X' => (Base::Hex, &src[2..]),
+                _ => (Base::Dec, src),
+            }
+        } else {
+            (Base::Dec, src)
+        }
+    }
+
+    pub fn from_str_radix(src: &str, radix: u32) -> Result<Int, ParseIntError> {
+        let (negative, src) = if let Some(s) = src.strip_prefix('-') {
+            (true, s)
+        } else if let Some(s) = src.strip_prefix('+') {
+            (false, s)
+        } else {
+            (false, src)
+        };
+        let (base, text) = match radix {
+            2 => (Base::Bin, Self::strip_numeric_prefix(src, b'b')),
+            8 => (Base::Oct, Self::strip_numeric_prefix(src, b'o')),
+            16 => (Base::Hex, Self::strip_numeric_prefix(src, b'x')),
+            10 => (Base::Dec, src),
+            _ => Self::detect_numeric_prefix(src),
+        };
+        let value = IntValue::U128(u128::from_str_radix(text, base as u32)?);
+        let value = if negative { value.negate() } else { value };
+        Ok(Self::new_with_padding(value, base, text.len()))
+    }
 }
 
 impl fmt::Display for Int {
@@ -198,10 +258,13 @@ impl_from_int!(i16);
 impl_from_int!(i32);
 impl_from_int!(i64);
 impl_from_int!(i128);
+impl_from_int!(f32);
+impl_from_int!(f64);
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::Result;
 
     #[test]
     fn basic_conversions() {
@@ -214,6 +277,33 @@ mod tests {
         assert_eq!(Int::new(-8i8, Base::Oct).to_string(), "0o370");
         assert_eq!(Int::new(-10i8, Base::Dec).to_string(), "-10");
         assert_eq!(Int::new(-16i8, Base::Hex).to_string(), "0xF0");
+    }
+
+    #[test]
+    fn basic_parse() -> Result<()> {
+        assert_eq!(u8::from(Int::from_str_radix("0b10", 0)?), 2);
+        assert_eq!(u8::from(Int::from_str_radix("0o10", 0)?), 8);
+        assert_eq!(u8::from(Int::from_str_radix("0x10", 0)?), 16);
+        assert_eq!(u8::from(Int::from_str_radix("10", 0)?), 10);
+
+        assert_eq!(i8::from(Int::from_str_radix("0b11111110", 0)?), -2);
+        assert_eq!(i8::from(Int::from_str_radix("0o370", 0)?), -8);
+        assert_eq!(i8::from(Int::from_str_radix("0xF0", 0)?), -16);
+        assert_eq!(i8::from(Int::from_str_radix("-10", 0)?), -10);
+        Ok(())
+    }
+
+    #[test]
+    fn basic_roundtrip() -> Result<()> {
+        assert_eq!(
+            Int::from_str_radix("0x12345678", 0)?.to_string(),
+            "0x12345678"
+        );
+        // Base and leading zeros are preserved.
+        assert_eq!(Int::from_str_radix("0b0001", 0)?.to_string(), "0b0001");
+        // Base-identifier and Hex capitalization are not preserved.
+        assert_eq!(Int::from_str_radix("0Xab", 0)?.to_string(), "0xAB");
+        Ok(())
     }
 
     #[test]
