@@ -71,6 +71,19 @@ impl Document {
         relax.from_str(text)
     }
 
+    pub fn from_json(text: &str) -> Result<Document, Error> {
+        let relax = Relax::json();
+        relax.from_str(text)
+    }
+    pub fn from_json5(text: &str) -> Result<Document, Error> {
+        let relax = Relax::json5();
+        relax.from_str(text)
+    }
+    pub fn from_hjson(text: &str) -> Result<Document, Error> {
+        let relax = Relax::hjson();
+        relax.from_str(text)
+    }
+
     pub fn variant(&self) -> &'static str {
         match self {
             Document::Comment(_, _) => "Comment",

@@ -103,19 +103,23 @@ impl Relax {
     }
 
     fn from_str_radix(text: &str, radix: u32, negative: bool) -> Result<Document, Error> {
-        let base = match radix {
-            2 => Base::Bin,
-            8 => Base::Oct,
-            10 => Base::Dec,
-            16 => Base::Hex,
+        let (base, t) = match radix {
+            2 => (Base::Bin, &text[2..]),
+            8 => (Base::Oct, &text[2..]),
+            10 => (Base::Dec, text),
+            16 => (Base::Hex, &text[2..]),
             _ => return Err(Error::Unknown(format!("invalid base {}", radix))),
         };
-        let val = u128::from_str_radix(text, radix).unwrap();
-        if negative {
-            let val = -(val as i128);
-            return Ok(Document::Int(Int::new(val, base)));
-        } else {
-            return Ok(Document::Int(Int::new(val, base)));
+        match u128::from_str_radix(t, radix) {
+            Ok(val) => {
+                if negative {
+                    let val = -(val as i128);
+                    return Ok(Document::Int(Int::new(val, base)));
+                } else {
+                    return Ok(Document::Int(Int::new(val, base)));
+                }
+            }
+            Err(_) => Ok(Document::String(text.into(), StrFormat::Standard)),
         }
     }
 
@@ -188,7 +192,7 @@ impl Relax {
                 "hexadecimal literal",
                 pair.as_span().start_pos(),
             )?;
-            return Self::from_str_radix(&t[2..], 16, negative);
+            return Self::from_str_radix(&t, 16, negative);
         } else if t.starts_with("0b") || t.starts_with("0B") {
             // Hexadecimal integer.
             Self::syntax_error(
@@ -196,7 +200,7 @@ impl Relax {
                 "binary literal",
                 pair.as_span().start_pos(),
             )?;
-            return Self::from_str_radix(&t[2..], 2, negative);
+            return Self::from_str_radix(&t, 2, negative);
         } else if t.starts_with("0o") || t.starts_with("0O") {
             // Hexadecimal integer.
             Self::syntax_error(
@@ -204,7 +208,7 @@ impl Relax {
                 "octal literal",
                 pair.as_span().start_pos(),
             )?;
-            return Self::from_str_radix(&t[2..], 8, negative);
+            return Self::from_str_radix(&t, 8, negative);
         } else if t.contains('.')
             || t.contains('e')
             || t.contains('E')
@@ -480,7 +484,7 @@ impl Relax {
                 "missing quotes",
                 pair.as_span().start_pos(),
             )?;
-            Ok(Document::String(s.into(), StrFormat::Unquoted))
+            Ok(Document::String(s.trim().into(), StrFormat::Unquoted))
         }
     }
 
@@ -490,6 +494,14 @@ impl Relax {
             Rule::null => Ok(Document::Null),
             Rule::boolean => Ok(Document::Boolean(pair.as_str().parse().unwrap())),
             Rule::string => self.handle_string(pair),
+            Rule::hjson_key => {
+                Self::syntax_error(
+                    !self.string_ident,
+                    "missing quotes",
+                    pair.as_span().start_pos(),
+                )?;
+                Ok(Document::String(pair.as_str().into(), StrFormat::Unquoted))
+            }
             Rule::identifier => {
                 Self::syntax_error(
                     !self.string_ident,
@@ -698,12 +710,11 @@ mod tests {
     }
 
     fn parse_mapping(r: &Relax, text: &str) -> Result<Vec<Document>> {
-        let doc = r.from_str(text);
-        println!("mapping = {:?}", doc);
-        if let Document::Mapping(m) = doc? {
+        let doc = r.from_str(text)?;
+        if let Document::Mapping(m) = doc {
             Ok(m)
         } else {
-            Err(anyhow!("Didn't return Document::Mapping()"))
+            Err(anyhow!("Didn't return Document::Mapping()\n{:?}", doc))
         }
     }
 
@@ -733,10 +744,12 @@ mod tests {
     }
 
     fn parse_sequence(r: &Relax, text: &str) -> Result<Vec<Document>> {
-        if let Document::Sequence(s) = r.from_str(text)? {
+        let doc = r.from_str(text);
+        if let Ok(Document::Sequence(s)) = doc {
             Ok(s)
         } else {
-            Err(anyhow!("Didn't return Document::Mapping()"))
+            println!("doc = {:?}", doc);
+            Err(anyhow!("Didn't return Document::Sequence()\n{:?}", doc))
         }
     }
 
@@ -757,7 +770,7 @@ mod tests {
         if let Document::Comment(c, f) = doc {
             Ok((c, f))
         } else {
-            Err(anyhow!("Didn't return Document::Comment()"))
+            Err(anyhow!("Didn't return Document::Comment()\n{:?}", doc))
         }
     }
     #[test]
@@ -866,6 +879,14 @@ mod tests {
                 "b": false}"#
         )
         .is_err());
+        assert!(parse_sequence(
+            &relax,
+            r#"[
+            {k: 22,   m: 6,  code_type: "hsiao"  },
+            {k: 22,   m: 5,  code_type: "hsiao"  },
+        ]"#
+        )
+        .is_err());
         Ok(())
     }
 
@@ -884,6 +905,14 @@ mod tests {
                 "b": false}"#
         )
         .is_err());
+        assert!(parse_sequence(
+            &relax,
+            r#"[
+            {k: 22,   m: 6,  code_type: "hsiao"  },
+            {k: 22,   m: 5,  code_type: "hsiao"  },
+        ]"#
+        )
+        .is_ok());
         Ok(())
     }
 
@@ -902,6 +931,14 @@ mod tests {
                 "b": false}"#
         )
         .is_ok());
+        assert!(parse_sequence(
+            &relax,
+            r#"[
+            {k: 22,   m: 6,  code_type: "hsiao"  }
+            {k: 22,   m: 5,  code_type: "hsiao"  }
+        ]"#
+        )
+        .is_ok());
         Ok(())
     }
 
@@ -912,6 +949,17 @@ mod tests {
         assert!(parse_string(&relax, r#"'foo'"#).is_err());
         assert!(parse_string(&relax, "foo bar baz").is_err());
         assert!(parse_mapping(&relax, "{a: true}").is_err());
+        let m = parse_mapping(
+            &relax,
+            r#"
+            {
+                time: 01/02/03 04:05:06AM
+                name: Fred
+                type: person
+            }
+        "#,
+        );
+        assert!(m.is_err());
         assert!(parse_string(
             &relax,
             r#""foo\
@@ -937,6 +985,17 @@ mod tests {
         assert!(parse_string(&relax, r#"'foo'"#).is_ok());
         assert!(parse_string(&relax, "foo bar baz").is_err());
         assert!(parse_mapping(&relax, "{a: true}").is_ok());
+        let m = parse_mapping(
+            &relax,
+            r#"
+            {
+                time: 01/02/03 04:05:06AM
+                name: Fred
+                type: person
+            }
+        "#,
+        );
+        assert!(m.is_err());
         assert!(parse_string(
             &relax,
             r#""foo\
@@ -960,8 +1019,19 @@ mod tests {
         let relax = Relax::hjson();
         assert!(parse_string(&relax, r#""foo""#).is_ok());
         assert!(parse_string(&relax, r#"'foo'"#).is_ok());
-        assert!(parse_string(&relax, "foo bar baz").is_ok());
+        assert!(parse_string(&relax, "foo bar baz\n").is_ok());
         assert!(parse_mapping(&relax, "{a: true}").is_ok());
+        let m = parse_mapping(
+            &relax,
+            r#"
+            {
+                time: 01/02/03 04:05:06AM
+                name: Fred
+                type: person
+            }
+        "#,
+        );
+        assert!(m.is_ok());
         assert!(parse_string(
             &relax,
             r#""foo\
