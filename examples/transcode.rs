@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use clap::{ArgEnum, Parser};
 use serde_annotate::{ColorProfile, Document};
 use std::path::PathBuf;

@@ -69,14 +69,12 @@ hex_integer_literal = _{ ^"0x" ~ ASCII_HEX_DIGIT+ }
 bin_integer_literal = _{ ^"0b" ~ ('0'..'1')+ }
 oct_integer_literal = _{ ^"0o" ~ ('0'..'7')+ }
 
-hjson_punctuator = { "{" | "}" | "[" | "]" | "," | ":" | "/*" | "//" | "#" }
-hjson_unquoted_string = @{ !hjson_punctuator ~ (!line_terminator ~ ANY)+ }
-
 identifier = ${ identifier_start ~ identifier_part* }
 
 identifier_part = _{
   identifier_start |
   &(
+    !hjson_punctuator |
     NONSPACING_MARK |
     DIACRITIC | // not sure about this, spec says "Combining spacing mark (Mc)"
     DECIMAL_NUMBER |
@@ -91,7 +89,8 @@ identifier_start = _{
   "\\u" ~ unicode_escape_sequence
 }
 
-key = _{ identifier | string }
+
+key = _{ identifier | number | string }
 
 line_continuation = _{ "\\" ~ line_terminator_sequence }
 
@@ -130,7 +129,13 @@ single_quote_char = _{
 
 hjson_multiline_string = @{ "'''" ~ (!"'''" ~ ANY)* ~ "'''" }
 
-string = ${
+hjson_punctuator = { "{" | "}" | "[" | "]" | "," | ":" }
+hjson_number = { number ~ (hjson_punctuator | WHITESPACE | COMMENT) }
+hjson_key = @{ (!hjson_punctuator ~ !COMMENT ~ ANY)+ }
+hjson_unquoted = @{ !hjson_number ~ !hjson_punctuator ~ !COMMENT ~ (!line_terminator ~ ANY)+ }
+hjson_unquoted_string = @{ hjson_unquoted ~ line_terminator_sequence ~ WHITESPACE* }
+
+string = @{
     hjson_multiline_string |
     "'" ~ single_quote_char* ~ "'" |
     "\"" ~ double_quote_char* ~ "\"" |
@@ -150,4 +155,4 @@ unicode_letter = _{
   LETTER_NUMBER
 }
 
-value = _{ null | boolean | number | object | array | string }
+value = _{ null | boolean | string | number | object | array }
