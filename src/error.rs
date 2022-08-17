@@ -1,13 +1,16 @@
 use crate::relax::ParseError;
-use serde::ser;
+use serde::{de, ser};
 use std::char::CharTryFromError;
 use std::fmt::Display;
+use std::num::ParseIntError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("serializer error: {0}")]
-    Ser(String),
+    Serialize(String),
+    #[error("deserializer error: {0}")]
+    Deserialize(String),
     #[error("unknown error: {0}")]
     Unknown(String),
     #[error("unhandled escape: `\\{0}`")]
@@ -19,6 +22,8 @@ pub enum Error {
     #[error(transparent)]
     ParseError(#[from] ParseError),
     #[error(transparent)]
+    ParseIntError(#[from] ParseIntError),
+    #[error(transparent)]
     CharTryFromError(#[from] CharTryFromError),
     #[error("document structure error: expected {0} but got {1}")]
     StructureError(&'static str, &'static str),
@@ -28,7 +33,13 @@ pub enum Error {
 
 impl ser::Error for Error {
     fn custom<T: Display>(msg: T) -> Self {
-        Error::Ser(msg.to_string())
+        Error::Serialize(msg.to_string())
+    }
+}
+
+impl de::Error for Error {
+    fn custom<T: Display>(msg: T) -> Self {
+        Error::Deserialize(msg.to_string())
     }
 }
 

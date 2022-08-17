@@ -51,6 +51,10 @@ impl_from_primitive!(i128, I128);
 impl IntValue {
     const HEX: &'static [u8; 16] = b"0123456789ABCDEF";
 
+    // Converts an `IntValue` to text with the requested base and output width.
+    // The integer is represented with enough leading zeros to meet the output width.
+    // The output width may be exceeded if the integer cannot fit within the
+    // requested space.
     fn convert<T: PrimInt + ToString>(mut v: T, base: Base, mut width: usize) -> String {
         let shift = match base {
             Base::Bin => 1,
@@ -159,6 +163,7 @@ impl Int {
         Self::new_with_padding(v, base, usize::MAX)
     }
 
+    /// Returns whether the integer is within the legal range of json integers.
     pub fn is_legal_json(&self) -> bool {
         match self.value {
             IntValue::U64(v) => v < (1 << 53),
@@ -169,10 +174,12 @@ impl Int {
         }
     }
 
+    /// Returns the preferred base for expressing this integer.
     pub fn base(&self) -> Base {
         self.base
     }
 
+    /// Formats the integer in the requested base, defaulting to the preferred base.
     pub fn format(&self, base: Option<&Base>) -> String {
         self.value.format(*base.unwrap_or(&Base::Dec), self.width)
     }
@@ -200,6 +207,13 @@ impl Int {
         }
     }
 
+    /// Converts from a string into an integer value.
+    /// - If the `radix` is 2, 8 or 16, the integer is parsed in that base.
+    ///   The integer may start with one of the common prefixes `0x`, `0b`, or `0o`.
+    ///
+    /// - If `radix` is `0`, the base is inferred from the common integer
+    ///   prefixes `0x`, `0b` and `0o`.  If there is no prefix, the base defaults
+    ///   to base 10.
     pub fn from_str_radix(src: &str, radix: u32) -> Result<Int, ParseIntError> {
         let (negative, src) = if let Some(s) = src.strip_prefix('-') {
             (true, s)
@@ -229,8 +243,26 @@ impl fmt::Display for Int {
 
 macro_rules! impl_from_int {
     ($t:ty) => {
+        /// Consumes the `Int` converting to a primitive type.
         impl From<Int> for $t {
             fn from(val: Int) -> Self {
+                match val.value {
+                    IntValue::U8(v) => v as $t,
+                    IntValue::U16(v) => v as $t,
+                    IntValue::U32(v) => v as $t,
+                    IntValue::U64(v) => v as $t,
+                    IntValue::U128(v) => v as $t,
+                    IntValue::I8(v) => v as $t,
+                    IntValue::I16(v) => v as $t,
+                    IntValue::I32(v) => v as $t,
+                    IntValue::I64(v) => v as $t,
+                    IntValue::I128(v) => v as $t,
+                }
+            }
+        }
+        /// Converts the `Int` to a primitive type.
+        impl From<&Int> for $t {
+            fn from(val: &Int) -> Self {
                 match val.value {
                     IntValue::U8(v) => v as $t,
                     IntValue::U16(v) => v as $t,
