@@ -1,8 +1,9 @@
 use serde::ser;
 
 use crate::annotate::{Annotate, AnnotateType, Format, MemberId};
-use crate::document::{CommentFormat, Document, StrFormat};
+use crate::document::{BytesFormat, CommentFormat, Document, StrFormat};
 use crate::error::Error;
+use crate::hexdump;
 use crate::integer::{Base, Int};
 
 pub fn serialize<T>(value: &T) -> Result<Document, Error>
@@ -19,6 +20,7 @@ pub struct AnnotatedSerializer<'a> {
     annotator: Option<&'a dyn Annotate>,
     base: Base,
     strformat: StrFormat,
+    bytesformat: BytesFormat,
     compact: bool,
 }
 
@@ -28,6 +30,7 @@ impl<'a> AnnotatedSerializer<'a> {
             annotator,
             base: Base::Dec,
             strformat: StrFormat::Standard,
+            bytesformat: BytesFormat::Standard,
             compact: false,
         }
     }
@@ -35,6 +38,12 @@ impl<'a> AnnotatedSerializer<'a> {
     fn with_base(&self, b: Base) -> Self {
         let mut x = self.clone();
         x.base = b;
+        x
+    }
+
+    fn with_bytesformat(&self, b: BytesFormat) -> Self {
+        let mut x = self.clone();
+        x.bytesformat = b;
         x
     }
 
@@ -58,6 +67,9 @@ impl<'a> AnnotatedSerializer<'a> {
             Some(Format::Hex) => Some(self.with_base(Base::Hex)),
             Some(Format::Octal) => Some(self.with_base(Base::Oct)),
             Some(Format::Compact) => Some(self.with_compact(true)),
+            Some(Format::HexStr) => Some(self.with_bytesformat(BytesFormat::HexStr)),
+            Some(Format::Hexdump) => Some(self.with_bytesformat(BytesFormat::Hexdump)),
+            Some(Format::Xxd) => Some(self.with_bytesformat(BytesFormat::Xxd)),
             None => None,
         }
     }
@@ -152,7 +164,11 @@ impl<'s, 'a> ser::Serializer for &'s mut AnnotatedSerializer<'a> {
     }
 
     fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
-        Ok(Document::Bytes(v.to_vec()))
+        if let Some(string) = hexdump::to_string(v, self.bytesformat) {
+            Ok(Document::String(string, StrFormat::Multiline))
+        } else {
+            Ok(Document::Bytes(v.to_vec()))
+        }
     }
 
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {

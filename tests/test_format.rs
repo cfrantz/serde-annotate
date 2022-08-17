@@ -46,12 +46,38 @@ macro_rules! tester {
         let decode: $t = deser_hjson::from_str(&string)?;
         assert_eq!($value, &decode);
     }};
+    (relax, $t:ty, $value:expr, $expect:expr) => {{
+        let doc = serialize($value)?;
+        let string = doc.to_json().to_string();
+        assert_eq!(string, fixdoc($expect));
+        let decode: $t = serde_annotate::from_str(&string)?;
+        assert_eq!($value, &decode);
+    }};
+    (relax_json5, $t:ty, $value:expr, $expect:expr) => {{
+        let doc = serialize($value)?;
+        let string = doc.to_json5().to_string();
+        assert_eq!(string, fixdoc($expect));
+        let decode: $t = serde_annotate::from_str(&string)?;
+        assert_eq!($value, &decode);
+    }};
+    (relax_hjson, $t:ty, $value:expr, $expect:expr) => {{
+        let doc = serialize($value)?;
+        let string = doc.to_hjson().to_string();
+        assert_eq!(string, fixdoc($expect));
+        let decode: $t = serde_annotate::from_str(&string)?;
+        assert_eq!($value, &decode);
+    }};
     (yaml, $t:ty, $value:expr, $expect:expr) => {{
         let doc = serialize($value)?;
         let string = doc.to_yaml().to_string();
         assert_eq!(string, fixdoc($expect));
         let decode: $t = serde_yaml::from_str(&string)?;
         assert_eq!($value, &decode);
+    }};
+    (ser_yaml, $t:ty, $value:expr, $expect:expr) => {{
+        let doc = serialize($value)?;
+        let string = doc.to_yaml().to_string();
+        assert_eq!(string, fixdoc($expect));
     }};
 }
 
@@ -307,6 +333,158 @@ fn test_nes_addresses() -> Result<()> {
           c:
             # NES CHR bank:address
             Chr: [0x2, 0x400]"#
+    );
+
+    Ok(())
+}
+
+#[derive(Serialize, Deserialize, Annotate, Debug, PartialEq)]
+struct Poem {
+    #[serde(with = "serde_bytes")]
+    #[annotate(comment = "No special bytes encoding")]
+    first_stanza: Vec<u8>,
+    #[serde(with = "serde_bytes")]
+    #[annotate(format=hexstr, comment="Encoded as `hexstr`")]
+    second_stanza: Vec<u8>,
+    #[serde(with = "serde_bytes")]
+    #[annotate(format=hexdump, comment="Encoded as `hexdump`")]
+    third_stanza: Vec<u8>,
+    #[serde(with = "serde_bytes")]
+    #[annotate(format=xxd, comment="Encoded as `xxd`")]
+    fourth_stanza: Vec<u8>,
+}
+
+#[test]
+fn test_bytes() -> Result<()> {
+    let value = Poem {
+        first_stanza: "Mary had a little lamb".into(),
+        second_stanza: "its fleece was white as snow".into(),
+        third_stanza: "Everywhere that Mary went".into(),
+        fourth_stanza: "the lamb was sure to go".into(),
+    };
+
+    // We can't test deserialization of the yaml data yet because we don't yet
+    // have a parser or adapter for yaml that emits a `serde_annotate::Document`
+    // to feed to our deserializer implementation.
+    tester!(
+        ser_yaml,
+        Poem,
+        &value,
+        r#"
+          ---
+          # No special bytes encoding
+          first_stanza: [
+          0x4D,0x61,0x72,0x79,0x20,0x68,0x61,0x64,0x20,0x61,0x20,0x6C,0x69,0x74,0x74,0x6C,
+          0x65,0x20,0x6C,0x61,0x6D,0x62,
+          ]
+          # Encoded as `hexstr`
+          second_stanza: |-
+            69747320666c656563652077617320776869746520617320736e6f77
+          # Encoded as `hexdump`
+          third_stanza: |-
+            00000000  45 76 65 72 79 77 68 65  72 65 20 74 68 61 74 20  |Everywhere that |
+            00000010  4d 61 72 79 20 77 65 6e  74                       |Mary went|
+          # Encoded as `xxd`
+          fourth_stanza: |-
+            00000000: 7468 6520 6c61 6d62 2077 6173 2073 7572  the lamb was sur
+            00000010: 6520 746f 2067 6f                        e to go"#
+    );
+
+    // We can only test deserialization of the data with the `relax` parser
+    // as it feeds our deserializer implementation.
+    tester!(
+        relax_json5,
+        Poem,
+        &value,
+        r#"
+        {
+          // No special bytes encoding
+          first_stanza: [
+            77,
+            97,
+            114,
+            121,
+            32,
+            104,
+            97,
+            100,
+            32,
+            97,
+            32,
+            108,
+            105,
+            116,
+            116,
+            108,
+            101,
+            32,
+            108,
+            97,
+            109,
+            98
+          ],
+          // Encoded as `hexstr`
+          second_stanza: "69747320666c656563652077617320776869746520617320736e6f77",
+          // Encoded as `hexdump`
+          third_stanza: "00000000  45 76 65 72 79 77 68 65  72 65 20 74 68 61 74 20  |Everywhere that |\
+        00000010  4d 61 72 79 20 77 65 6e  74                       |Mary went|",
+          // Encoded as `xxd`
+          fourth_stanza: "00000000: 7468 6520 6c61 6d62 2077 6173 2073 7572  the lamb was sur\
+        00000010: 6520 746f 2067 6f                        e to go"
+        }"#
+    );
+
+    // We can only test deserialization of the data with the `relax` parser
+    // as it feeds our deserializer implementation.
+    tester!(
+        relax_hjson,
+        Poem,
+        &value,
+        r#"
+        {
+          # No special bytes encoding
+          first_stanza: [
+            77,
+            97,
+            114,
+            121,
+            32,
+            104,
+            97,
+            100,
+            32,
+            97,
+            32,
+            108,
+            105,
+            116,
+            116,
+            108,
+            101,
+            32,
+            108,
+            97,
+            109,
+            98
+          ],
+          # Encoded as `hexstr`
+          second_stanza: 
+            '''
+            69747320666c656563652077617320776869746520617320736e6f77
+            ''',
+          # Encoded as `hexdump`
+          third_stanza: 
+            '''
+            00000000  45 76 65 72 79 77 68 65  72 65 20 74 68 61 74 20  |Everywhere that |
+            00000010  4d 61 72 79 20 77 65 6e  74                       |Mary went|
+            ''',
+          # Encoded as `xxd`
+          fourth_stanza: 
+            '''
+            00000000: 7468 6520 6c61 6d62 2077 6173 2073 7572  the lamb was sur
+            00000010: 6520 746f 2067 6f                        e to go
+            '''
+        }"#
     );
 
     Ok(())

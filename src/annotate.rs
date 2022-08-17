@@ -17,6 +17,12 @@ pub enum Format {
     Octal,
     /// Format an aggregate in compact mode.
     Compact,
+    /// Format a bytes object as a hex string.
+    HexStr,
+    /// Format a bytes object as hexdump (e.g. `hexdump -vC <file>`).
+    Hexdump,
+    /// Format a bytes object as xxd (e.g. `xxd <file>`).
+    Xxd,
 }
 
 /// Identifies a field or variant member of a struct/enum.
@@ -26,8 +32,6 @@ pub enum MemberId<'a> {
     Variant,
 }
 
-/// Trait implemented on structs to inform the serializer about formatting
-/// options and comments.
 pub trait Annotate {
     fn format(&self, variant: Option<&str>, field: &MemberId) -> Option<Format>;
     fn comment(&self, variant: Option<&str>, field: &MemberId) -> Option<String>;

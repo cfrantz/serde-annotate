@@ -18,6 +18,19 @@ pub enum StrFormat {
     Multiline,
 }
 
+/// Represents possible serialized bytes formats.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BytesFormat {
+    /// The standard format for the serialization backend.
+    Standard,
+    /// Hexadecimal string (e.g. "98ab45cdeaff").
+    HexStr,
+    /// Hexdump like `hexdump -vC ...`.
+    Hexdump,
+    /// Hexdump like `xxd ...`.
+    Xxd,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CommentFormat {
     /// The standard format for the serialization backend.

@@ -7,6 +7,7 @@ use serde::de::{
 
 use crate::document::Document;
 use crate::error::Error;
+use crate::hexdump;
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -149,17 +150,25 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         self.deserialize_str(v)
     }
 
-    fn deserialize_bytes<V>(self, _v: V) -> Result<V::Value>
+    fn deserialize_bytes<V>(self, v: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unimplemented!();
+        self.deserialize_byte_buf(v)
     }
-    fn deserialize_byte_buf<V>(self, _v: V) -> Result<V::Value>
+    fn deserialize_byte_buf<V>(self, v: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unimplemented!();
+        match self.doc.as_value()? {
+            Document::Bytes(b) => v.visit_byte_buf(b.clone()),
+            Document::String(s, _) => v.visit_byte_buf(hexdump::from_str(s)?),
+            Document::Sequence(_) => self.deserialize_seq(v),
+            _ => Err(Error::StructureError(
+                "String or Sequence",
+                self.doc.variant(),
+            )),
+        }
     }
 
     fn deserialize_option<V>(self, v: V) -> Result<V::Value>
