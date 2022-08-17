@@ -1,6 +1,6 @@
 // Document Enum for serialization
-//
-//
+use std::convert::TryFrom;
+
 use crate::error::Error;
 use crate::integer::Int;
 use crate::relax::Relax;
@@ -66,24 +66,31 @@ impl From<&'static str> for Document {
 }
 
 impl Document {
+    /// Parses a string into a `Document` using the maximally permissive parser.
     pub fn parse(text: &str) -> Result<Document, Error> {
         let relax = Relax::default();
         relax.from_str(text)
     }
 
+    /// Parses a string into a `Document` using strict json.
     pub fn from_json(text: &str) -> Result<Document, Error> {
         let relax = Relax::json();
         relax.from_str(text)
     }
+
+    /// Parses a string into a `Document` using json5.
     pub fn from_json5(text: &str) -> Result<Document, Error> {
         let relax = Relax::json5();
         relax.from_str(text)
     }
+
+    /// Parses a string into a `Document` using hjson.
     pub fn from_hjson(text: &str) -> Result<Document, Error> {
         let relax = Relax::hjson();
         relax.from_str(text)
     }
 
+    /// Returns the variant of this `Document`.
     pub fn variant(&self) -> &'static str {
         match self {
             Document::Comment(_, _) => "Comment",
@@ -101,6 +108,7 @@ impl Document {
         }
     }
 
+    /// Returns the list of fragments in this node.
     pub fn fragments(&self) -> Result<&[Document], Error> {
         if let Document::Fragment(f) = self {
             Ok(f)
@@ -109,19 +117,38 @@ impl Document {
         }
     }
 
+    /// Returns this node as a kvpair.
     pub fn as_kv(&self) -> Result<(&Document, &Document), Error> {
-        let f = self.fragments()?;
-        let kv = f
-            .iter()
-            .filter(|f| f.comment().is_none())
-            .collect::<Vec<_>>();
-        if kv.len() == 2 {
-            Ok((kv[0], kv[1]))
-        } else {
-            Err(Error::StructureError("2 elements", "??"))
+        let frags = self.fragments()?;
+        let kv = frags.iter().filter(|f| f.has_value()).collect::<Vec<_>>();
+        match kv.len() {
+            0 => Err(Error::StructureError("kvpair", "zero elements")),
+            1 => Err(Error::StructureError("kvpair", "one element")),
+            2 => Ok((kv[0], kv[1])),
+            _ => Err(Error::StructureError("kvpair", "many elements")),
         }
     }
 
+    /// Returns this node value-containing `Document`.
+    /// A comment node has no value and thus returns an error.
+    /// A fragment node must contain exactly one value or it returns an error.
+    pub fn as_value(&self) -> Result<&Document, Error> {
+        match self {
+            Document::Comment(_, _) => Err(Error::StructureError("a value", "Comment")),
+            Document::Compact(c) => c.as_value(),
+            Document::Fragment(frags) => {
+                let values = frags.iter().filter(|f| f.has_value()).collect::<Vec<_>>();
+                match values.len() {
+                    0 => Err(Error::StructureError("one value", "zero")),
+                    1 => Ok(values[0]),
+                    _ => Err(Error::StructureError("one value", "many")),
+                }
+            }
+            _ => Ok(self),
+        }
+    }
+
+    /// Returns whether this node is a value-containing node.
     pub fn has_value(&self) -> bool {
         match self {
             Document::Comment(_, _) => false,
@@ -131,6 +158,7 @@ impl Document {
         }
     }
 
+    /// Returns the index of the last value containing node in a slice.
     pub fn last_value_index(sequence: &[Document]) -> usize {
         let mut last = sequence.len();
         for (i, frag) in sequence.iter().enumerate().rev() {
@@ -142,6 +170,7 @@ impl Document {
         last
     }
 
+    /// Returns the comment information contained in a node.
     pub fn comment(&self) -> Option<(&str, &CommentFormat)> {
         if let Document::Comment(c, f) = self {
             Some((c.as_str(), f))
@@ -149,4 +178,94 @@ impl Document {
             None
         }
     }
+
+    /// Converts the document into a str slice or returns an error.
+    pub fn as_str(&self) -> Result<&str, Error> {
+        match self.as_value()? {
+            Document::String(s, _) => Ok(s.as_str()),
+            Document::StaticStr(s, _) => Ok(s),
+            _ => Err(Error::StructureError("String", self.variant())),
+        }
+    }
+
+    /// Converts the document into a null value or returns an error.
+    pub fn as_null(&self) -> Result<(), Error> {
+        match self.as_value()? {
+            Document::Null => Ok(()),
+            _ => Err(Error::StructureError("Null", self.variant())),
+        }
+    }
 }
+
+/// Tries to convert the document into a boolean value.
+impl TryFrom<&Document> for bool {
+    type Error = Error;
+    fn try_from(v: &Document) -> Result<Self, Self::Error> {
+        match v.as_value()? {
+            Document::Boolean(b) => Ok(*b),
+            _ => Err(Error::StructureError("Boolean", v.variant())),
+        }
+    }
+}
+
+/// Tries to convert the document into a char value.
+impl TryFrom<&Document> for char {
+    type Error = Error;
+    fn try_from(v: &Document) -> Result<Self, Self::Error> {
+        let s = v.as_str()?;
+        let mut chars = s.chars();
+        let ch = chars
+            .next()
+            .ok_or(Error::StructureError("one character", "zero"))?;
+        if chars.next().is_some() {
+            return Err(Error::StructureError("one character", "many"));
+        }
+        Ok(ch)
+    }
+}
+
+macro_rules! impl_int_conv {
+    ($t:ty) => {
+        /// Tries to convert the document into an integer value.
+        impl TryFrom<&Document> for $t {
+            type Error = Error;
+            fn try_from(v: &Document) -> Result<Self, Self::Error> {
+                match v.as_value()? {
+                    Document::Int(v) => Ok(<$t>::from(v)),
+                    Document::Float(v) => Ok(*v as $t),
+                    Document::String(s, _) => Ok(<$t>::from(Int::from_str_radix(s.as_str(), 0)?)),
+                    Document::StaticStr(s, _) => Ok(<$t>::from(Int::from_str_radix(s, 0)?)),
+                    _ => Err(Error::StructureError("Int", v.variant())),
+                }
+            }
+        }
+    };
+}
+impl_int_conv!(u8);
+impl_int_conv!(u16);
+impl_int_conv!(u32);
+impl_int_conv!(u64);
+impl_int_conv!(u128);
+impl_int_conv!(i8);
+impl_int_conv!(i16);
+impl_int_conv!(i32);
+impl_int_conv!(i64);
+impl_int_conv!(i128);
+
+macro_rules! impl_float_conv {
+    ($t:ty) => {
+        /// Tries to convert the document into a float value.
+        impl TryFrom<&Document> for $t {
+            type Error = Error;
+            fn try_from(v: &Document) -> Result<Self, Self::Error> {
+                match v.as_value()? {
+                    Document::Int(v) => Ok(<$t>::from(v)),
+                    Document::Float(v) => Ok(*v as $t),
+                    _ => Err(Error::StructureError("Float", v.variant())),
+                }
+            }
+        }
+    };
+}
+impl_float_conv!(f32);
+impl_float_conv!(f64);
