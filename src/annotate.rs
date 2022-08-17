@@ -17,6 +17,12 @@ pub enum Format {
     Octal,
     /// Format an aggregate in compact mode.
     Compact,
+    /// Format a bytes object as a hex string.
+    HexStr,
+    /// Format a bytes object as hexdump (e.g. `hexdump -vC <file>`).
+    Hexdump,
+    /// Format a bytes object as xxd (e.g. `xxd <file>`).
+    Xxd,
 }
 
 /// Identifies a field or variant member of a struct/enum.

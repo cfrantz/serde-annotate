@@ -15,6 +15,7 @@ annotate_derive = {path = "annotate_derive"}
 inventory = "0.2"
 pest = "2.2"
 pest_derive = "2.2"
+regex = "1"
 
 [dev-dependencies]
 anyhow = "1.0"

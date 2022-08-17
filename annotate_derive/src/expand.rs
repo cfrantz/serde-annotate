@@ -22,6 +22,9 @@ fn impl_format(a: &Attrs) -> TokenStream {
         Format::Hex => quote! { Some(Format::Hex) },
         Format::Octal => quote! { Some(Format::Octal) },
         Format::Compact => quote! { Some(Format::Compact) },
+        Format::HexStr => quote! { Some(Format::HexStr) },
+        Format::Hexdump => quote! { Some(Format::Hexdump) },
+        Format::Xxd => quote! { Some(Format::Xxd) },
     }
 }
 

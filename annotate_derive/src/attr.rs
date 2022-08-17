@@ -10,6 +10,9 @@ pub enum Format {
     Hex,
     Octal,
     Compact,
+    HexStr,
+    Hexdump,
+    Xxd,
 }
 
 #[derive(Debug, PartialEq)]
@@ -67,6 +70,9 @@ fn parse_annotate_attribute<'a>(attrs: &mut Attrs<'a>, attr: &'a Attribute) -> R
                     "dec" => Format::Decimal,
                     "oct" => Format::Octal,
                     "hex" => Format::Hex,
+                    "hexstr" => Format::HexStr,
+                    "hexdump" => Format::Hexdump,
+                    "xxd" => Format::Xxd,
                     "compact" => Format::Compact,
                     _ => Format::None,
                 };
