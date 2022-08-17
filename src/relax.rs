@@ -14,6 +14,12 @@ struct Inner {
     lines: Vec<usize>,
 }
 
+/// `Relax` is a permissive JSON parser that permits many common extensions to
+/// JSON documents including comments, alternate integer bases, multiline
+/// strings and relaxed handling of commas in aggregates.
+///
+/// The `Relax` parser is configurable and can allow or disallow each of these
+/// extensions.  The default `Relax` parser is maximally permissive.
 #[derive(Parser)]
 #[grammar = "relax.pest"]
 pub struct Relax {
@@ -38,7 +44,7 @@ pub struct Relax {
 pub(crate) type ParseError = PestError<Rule>;
 
 impl Default for Relax {
-    /// The default Relax parser is maximally permissive.
+    /// Returns a maximally permissive json parser.
     fn default() -> Self {
         Relax {
             inner: Default::default(),
@@ -84,6 +90,7 @@ impl Relax {
         }
     }
 
+    /// Creates a json5 parser.
     pub fn json5() -> Self {
         let mut r = Self::default();
         r.comma_optional = false;
@@ -95,6 +102,7 @@ impl Relax {
         r
     }
 
+    /// Creates a hjson parser.
     pub fn hjson() -> Self {
         let mut r = Self::default();
         r.string_json5_multiline = false;
@@ -106,9 +114,10 @@ impl Relax {
         r
     }
 
+    /// Parses a string into a `Document`.
     pub fn from_str(&self, text: &str) -> Result<Document, Error> {
-        // Iterate of the input text and remember the line breaks. Since we use
-        // positioning information infer which comments belong with which json
+        // Iterate over the input text and remember the line breaks. Since we use
+        // positioning information to infer which comments belong with which json
         // items, caching the line-number information speeds up parsing
         // quite a bit.
         let mut inner = Inner::default();

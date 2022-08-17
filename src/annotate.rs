@@ -3,21 +3,31 @@ use once_cell::sync::OnceCell;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
+/// Specifies the formatting options to use when serializing.
+pub enum Format {
+    /// Format a string in block/multiline style.
+    Block,
+    /// Format an integer as binary.
+    Binary,
+    /// Format an integer as decimal.
+    Decimal,
+    /// Format an integer as hexadecimal.
+    Hex,
+    /// Format an integer as octal.
+    Octal,
+    /// Format an aggregate in compact mode.
+    Compact,
+}
+
+/// Identifies a field or variant member of a struct/enum.
 pub enum MemberId<'a> {
     Name(&'a str),
     Index(u32),
     Variant,
 }
 
-pub enum Format {
-    Block,
-    Binary,
-    Decimal,
-    Hex,
-    Octal,
-    Compact,
-}
-
+/// Trait implemented on structs to inform the serializer about formatting
+/// options and comments.
 pub trait Annotate {
     fn format(&self, variant: Option<&str>, field: &MemberId) -> Option<Format>;
     fn comment(&self, variant: Option<&str>, field: &MemberId) -> Option<String>;
