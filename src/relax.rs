@@ -274,12 +274,7 @@ impl Relax {
         let mut v = usize::MAX;
         let mut kv = vec![];
         let mut comma = false;
-        loop {
-            let pair = pairs.peek();
-            if pair.is_none() {
-                break;
-            }
-            let pair = pair.unwrap();
+        while let Some(pair) = pairs.peek() {
             let rule = pair.as_rule();
             if rule == Rule::comma {
                 comma = true;
@@ -329,12 +324,7 @@ impl Relax {
         let mut item = vec![];
         let mut comma = false;
         let mut saw_value = false;
-        loop {
-            let pair = pairs.peek();
-            if pair.is_none() {
-                break;
-            }
-            let pair = pair.unwrap();
+        while let Some(pair) = pairs.peek() {
             let rule = pair.as_rule();
             if rule == Rule::comma {
                 let _ = pairs.next();
@@ -522,7 +512,6 @@ impl Relax {
 
     fn handle_pair(&self, pair: Pair<Rule>) -> Result<Document, Error> {
         match pair.as_rule() {
-            //Rule::value => self.handle_pair(pair.into_inner().next().unwrap()),
             Rule::null => Ok(Document::Null),
             Rule::boolean => Ok(Document::Boolean(pair.as_str().parse().unwrap())),
             Rule::string => self.handle_string(pair),
