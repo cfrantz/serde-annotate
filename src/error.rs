@@ -3,6 +3,7 @@ use serde::{de, ser};
 use std::char::CharTryFromError;
 use std::fmt::Display;
 use std::num::ParseIntError;
+use std::str::ParseBoolError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -23,6 +24,8 @@ pub enum Error {
     KeyTypeError(&'static str),
     #[error(transparent)]
     ParseError(#[from] ParseError),
+    #[error(transparent)]
+    ParseBoolError(#[from] ParseBoolError),
     #[error(transparent)]
     ParseIntError(#[from] ParseIntError),
     #[error(transparent)]

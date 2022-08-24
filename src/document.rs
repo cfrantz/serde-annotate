@@ -130,6 +130,15 @@ impl Document {
         }
     }
 
+    /// Returns a mutable list of fragments in this node.
+    pub fn fragments_mut(&mut self) -> Result<&mut [Document], Error> {
+        if let Document::Fragment(ref mut f) = self {
+            Ok(f)
+        } else {
+            Err(Error::StructureError("Fragment", self.variant()))
+        }
+    }
+
     /// Returns this node as a kvpair.
     pub fn as_kv(&self) -> Result<(&Document, &Document), Error> {
         let frags = self.fragments()?;
@@ -142,7 +151,26 @@ impl Document {
         }
     }
 
-    /// Returns this node value-containing `Document`.
+    /// Returns this node as a mutable kvpair.
+    pub fn as_kv_mut(&mut self) -> Result<(&mut Document, &mut Document), Error> {
+        let frags = self.fragments_mut()?;
+        let mut kv = frags
+            .iter_mut()
+            .filter(|f| f.has_value())
+            .collect::<Vec<_>>();
+        match kv.len() {
+            0 => Err(Error::StructureError("kvpair", "zero elements")),
+            1 => Err(Error::StructureError("kvpair", "one element")),
+            2 => {
+                let v = kv.pop().unwrap();
+                let k = kv.pop().unwrap();
+                Ok((k, v))
+            }
+            _ => Err(Error::StructureError("kvpair", "many elements")),
+        }
+    }
+
+    /// Returns a reference to this node's value-containing `Document`.
     /// A comment node has no value and thus returns an error.
     /// A fragment node must contain exactly one value or it returns an error.
     pub fn as_value(&self) -> Result<&Document, Error> {
@@ -154,6 +182,28 @@ impl Document {
                 match values.len() {
                     0 => Err(Error::StructureError("one value", "zero")),
                     1 => Ok(values[0]),
+                    _ => Err(Error::StructureError("one value", "many")),
+                }
+            }
+            _ => Ok(self),
+        }
+    }
+
+    /// Returns a mutable reference to this node's value-containing `Document`.
+    /// A comment node has no value and thus returns an error.
+    /// A fragment node must contain exactly one value or it returns an error.
+    pub fn as_value_mut(&mut self) -> Result<&mut Document, Error> {
+        match self {
+            Document::Comment(_, _) => Err(Error::StructureError("a value", "Comment")),
+            Document::Compact(c) => c.as_value_mut(),
+            Document::Fragment(frags) => {
+                let mut values = frags
+                    .iter_mut()
+                    .filter(|f| f.has_value())
+                    .collect::<Vec<_>>();
+                match values.len() {
+                    0 => Err(Error::StructureError("one value", "zero")),
+                    1 => Ok(values.pop().unwrap()),
                     _ => Err(Error::StructureError("one value", "many")),
                 }
             }
@@ -210,12 +260,22 @@ impl Document {
     }
 }
 
+fn parse_bool(v: &str) -> Result<bool, Error> {
+    match v {
+        "true" | "True" | "TRUE" => Ok(true),
+        "false" | "False" | "FALSE" => Ok(false),
+        _ => Err(Error::StructureError("Boolean", "String")),
+    }
+}
+
 /// Tries to convert the document into a boolean value.
 impl TryFrom<&Document> for bool {
     type Error = Error;
     fn try_from(v: &Document) -> Result<Self, Self::Error> {
         match v.as_value()? {
             Document::Boolean(b) => Ok(*b),
+            Document::String(s, _) => parse_bool(s.as_str()),
+            Document::StaticStr(s, _) => parse_bool(s),
             _ => Err(Error::StructureError("Boolean", v.variant())),
         }
     }
