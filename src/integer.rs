@@ -280,16 +280,28 @@ macro_rules! impl_from_int {
     };
 }
 
-impl_from_int!(u8);
-impl_from_int!(u16);
-impl_from_int!(u32);
-impl_from_int!(u64);
-impl_from_int!(u128);
-impl_from_int!(i8);
-impl_from_int!(i16);
-impl_from_int!(i32);
-impl_from_int!(i64);
-impl_from_int!(i128);
+macro_rules! impl_to_from_int {
+    ($t:ty) => {
+        impl_from_int!($t);
+
+        impl From<$t> for Int {
+            fn from(val: $t) -> Self {
+                Int::new(val, Base::Dec)
+            }
+        }
+    };
+}
+
+impl_to_from_int!(u8);
+impl_to_from_int!(u16);
+impl_to_from_int!(u32);
+impl_to_from_int!(u64);
+impl_to_from_int!(u128);
+impl_to_from_int!(i8);
+impl_to_from_int!(i16);
+impl_to_from_int!(i32);
+impl_to_from_int!(i64);
+impl_to_from_int!(i128);
 impl_from_int!(f32);
 impl_from_int!(f64);
 
