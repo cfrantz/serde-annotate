@@ -5,11 +5,57 @@ use serde::de::{
     VariantAccess, Visitor,
 };
 
+use crate::doc_iter::DocPath;
 use crate::document::Document;
 use crate::error::Error;
 use crate::hexdump;
 
 type Result<T> = std::result::Result<T, Error>;
+
+/// Deserialize an owned document.
+pub struct Deserialize {
+    doc: Document,
+}
+
+impl TryFrom<&str> for Deserialize {
+    type Error = Error;
+    /// Parses a document from a `&str` and returns a `Deserialize`.
+    fn try_from(text: &str) -> Result<Self> {
+        let doc = Document::parse(text)?;
+        Ok(Deserialize { doc })
+    }
+}
+
+impl Deserialize {
+    /// Tranforms a document by calling `f` on each value-containing node in the
+    /// parsed document.  `f` may examine the node's object-path or contained value
+    /// to decide whether or not to modify the node.
+    ///
+    /// `f` should return `Some(new-node)` to modify the document or `None` to
+    /// not modify the document.
+    pub fn transform<F>(mut self, f: F) -> Self
+    where
+        F: Fn(&[DocPath], &str, &Document) -> Option<Document>,
+    {
+        for (path, doc) in self.doc.iter_path_mut() {
+            let path_str = path
+                .iter()
+                .map(DocPath::to_string)
+                .collect::<Vec<_>>()
+                .join(".");
+            if let Some(d) = f(&path, &path_str, doc) {
+                *doc = d;
+            }
+        }
+        self
+    }
+
+    /// Converts the owned document into type `T`.
+    pub fn into<T: DeserializeOwned>(self) -> Result<T> {
+        let mut ds = Deserializer::from_document(&self.doc)?;
+        T::deserialize(&mut ds)
+    }
+}
 
 /// A `Deserializer` deserializes a parsed document.
 pub struct Deserializer<'de> {
