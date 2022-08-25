@@ -12,7 +12,7 @@ All current text serialization formats are awful:
 
 - JSON: No comments, no multi-line strings, no hex literals, trailing-comma
   stupidity with aggregates.
-- HJSON: No hex literals; I don't like the triple single quote (''') to
+- HJSON: No hex literals; I don't like the triple single quote (`'''`) to
   designate multiline strings.  I'm ambivalent about quoteless strings.
 - JSON5: The multiline-string syntax is bad:  the C-like line continuations
   are clumsy.
