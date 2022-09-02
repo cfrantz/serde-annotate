@@ -42,6 +42,12 @@ pub struct AnnotateType {
 }
 inventory::collect!(AnnotateType);
 
+struct DefaultAnnotator;
+impl Annotate for DefaultAnnotator {
+    fn format(&self, _variant: Option<&str>, _field: &MemberId) -> Option<Format> {None}
+    fn comment(&self, _variant: Option<&str>, _field: &MemberId) -> Option<String> {None}
+}
+
 impl AnnotateType {
     pub fn type_id<T>() -> usize
     where
@@ -78,7 +84,7 @@ impl AnnotateType {
         typemap.get(&id).cloned()
     }
 
-    pub fn get<'a, T>(object: &'a T) -> Option<&'a dyn Annotate>
+    pub fn get<'a, T>(object: &'a T) -> &'a dyn Annotate
     where
         T: ?Sized,
     {
@@ -90,6 +96,6 @@ impl AnnotateType {
             std::mem::transmute::<&'static dyn Annotate, &'a dyn Annotate>(cast(
                 object as *const T as *const (),
             ))
-        })
+        }).unwrap_or(&DefaultAnnotator)
     }
 }

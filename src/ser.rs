@@ -16,14 +16,14 @@ where
 /// Serializer adapter that adds user-annotatons to the serialized document.
 #[derive(Clone)]
 pub struct AnnotatedSerializer<'a> {
-    annotator: Option<&'a dyn Annotate>,
+    annotator: &'a dyn Annotate,
     base: Base,
     strformat: StrFormat,
     compact: bool,
 }
 
 impl<'a> AnnotatedSerializer<'a> {
-    pub fn new(annotator: Option<&'a dyn Annotate>) -> Self {
+    pub fn new(annotator: &'a dyn Annotate) -> Self {
         AnnotatedSerializer {
             annotator,
             base: Base::Dec,
@@ -51,7 +51,7 @@ impl<'a> AnnotatedSerializer<'a> {
     }
 
     fn annotate(&self, variant: Option<&str>, field: &MemberId) -> Option<Self> {
-        match self.annotator.map(|a| a.format(variant, field)).flatten() {
+        match self.annotator.format(variant, field) {
             Some(Format::Block) => Some(self.with_strformat(StrFormat::Multiline)),
             Some(Format::Binary) => Some(self.with_base(Base::Bin)),
             Some(Format::Decimal) => Some(self.with_base(Base::Dec)),
@@ -63,9 +63,7 @@ impl<'a> AnnotatedSerializer<'a> {
     }
 
     fn comment(&self, variant: Option<&str>, field: &MemberId) -> Option<Document> {
-        self.annotator
-            .map(|a| a.comment(variant, field))
-            .flatten()
+        self.annotator.comment(variant, field)
             .map(|c| Document::Comment(c, CommentFormat::Standard))
     }
 
