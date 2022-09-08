@@ -1,0 +1,50 @@
+use anyhow::Result;
+use erased_serde::Serialize;
+use serde_annotate::annotate::Annotate;
+use serde_annotate::serialize;
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, Annotate)]
+struct Hello {
+    #[annotate(comment = "A greeting")]
+    message: String,
+}
+
+fn hello() -> Box<dyn Serialize> {
+    let hello = Box::new(Hello {
+        message: "Hello World!".into(),
+    });
+    hello
+}
+
+#[test]
+fn test_erased_serialization_regular() -> Result<()> {
+    let greeting = hello();
+    let s = serialize(&*greeting)?.to_json5().to_string();
+    assert_eq!(s, "{\n  // A greeting\n  message: \"Hello World!\"\n}");
+    Ok(())
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct NestedHello {
+    greeting: Hello,
+}
+
+fn nested_hello() -> Box<dyn Serialize> {
+    let n = NestedHello {
+        greeting: Hello {
+            message: "Hola!".into(),
+        },
+    };
+    Box::new(n)
+}
+
+#[test]
+fn test_erased_serialization_nested() -> Result<()> {
+    let greeting = nested_hello();
+    let s = serialize(&*greeting)?.to_json5().to_string();
+    assert_eq!(
+        s,
+        "{\n  greeting: {\n    // A greeting\n    message: \"Hola!\"\n  }\n}"
+    );
+    Ok(())
+}

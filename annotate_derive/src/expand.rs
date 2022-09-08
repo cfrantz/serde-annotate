@@ -119,7 +119,7 @@ fn impl_struct(input: Struct) -> TokenStream {
         const _: () = {
             extern crate serde_annotate;
             extern crate inventory;
-            use serde_annotate::annotate::{Annotate, AnnotateType, Format, MemberId};
+            use serde_annotate::annotate::{Annotate, AnnotateType, Format, IdType, MemberId};
 
             impl Annotate for #name {
                 fn format(&self, _variant: Option<&str>, field: &MemberId) -> Option<Format> {
@@ -136,7 +136,7 @@ fn impl_struct(input: Struct) -> TokenStream {
                 }
             }
             impl #name {
-                fn __type_id() -> usize {
+                fn __type_id() -> IdType {
                     AnnotateType::type_id::<Self>()
                 }
                 unsafe fn __cast(ptr: *const ()) -> &'static dyn Annotate {
@@ -161,7 +161,7 @@ fn impl_enum(input: Enum) -> TokenStream {
         const _: () = {
             extern crate serde_annotate;
             extern crate inventory;
-            use serde_annotate::annotate::{Annotate, AnnotateType, Format, MemberId};
+            use serde_annotate::annotate::{Annotate, AnnotateType, Format, IdType, MemberId};
 
             impl Annotate for #name {
                 fn format(&self, variant: Option<&str>, field: &MemberId) -> Option<Format> {
@@ -180,7 +180,7 @@ fn impl_enum(input: Enum) -> TokenStream {
                 }
             }
             impl #name {
-                fn __type_id() -> usize {
+                fn __type_id() -> IdType {
                     AnnotateType::type_id::<Self>()
                 }
                 unsafe fn __cast(ptr: *const ()) -> &'static dyn Annotate {
