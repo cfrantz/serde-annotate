@@ -165,7 +165,14 @@ impl<'s, 'a> ser::Serializer for &'s mut AnnotatedSerializer<'a> {
 
     fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
         if let Some(string) = hexdump::to_string(v, self.bytesformat) {
-            Ok(Document::String(string, StrFormat::Multiline))
+            Ok(Document::String(
+                string,
+                if self.bytesformat == BytesFormat::HexStr {
+                    StrFormat::Standard
+                } else {
+                    StrFormat::Multiline
+                },
+            ))
         } else {
             Ok(Document::Bytes(v.to_vec()))
         }

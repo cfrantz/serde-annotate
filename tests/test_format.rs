@@ -378,8 +378,7 @@ fn test_bytes() -> Result<()> {
           0x65,0x20,0x6C,0x61,0x6D,0x62,
           ]
           # Encoded as `hexstr`
-          second_stanza: |-
-            69747320666c656563652077617320776869746520617320736e6f77
+          second_stanza: 69747320666c656563652077617320776869746520617320736e6f77
           # Encoded as `hexdump`
           third_stanza: |-
             00000000  45 76 65 72 79 77 68 65  72 65 20 74 68 61 74 20  |Everywhere that |
@@ -468,10 +467,7 @@ fn test_bytes() -> Result<()> {
             98
           ],
           # Encoded as `hexstr`
-          second_stanza: 
-            '''
-            69747320666c656563652077617320776869746520617320736e6f77
-            ''',
+          second_stanza: "69747320666c656563652077617320776869746520617320736e6f77",
           # Encoded as `hexdump`
           third_stanza: 
             '''
