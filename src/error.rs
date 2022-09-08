@@ -17,6 +17,8 @@ pub enum Error {
     EscapeError(char),
     #[error("formatter error: {0:?}")]
     FmtError(std::fmt::Error),
+    #[error("Hexdump error: {0}")]
+    HexdumpError(String),
     #[error("Type {0:?} is not valid as a mapping key")]
     KeyTypeError(&'static str),
     #[error(transparent)]

@@ -3,6 +3,7 @@ mod color;
 mod de;
 mod document;
 mod error;
+mod hexdump;
 mod integer;
 mod json;
 mod relax;
