@@ -16,6 +16,8 @@ inventory = "0.2"
 pest = "2.2"
 pest_derive = "2.2"
 regex = "1"
+#erased-serde = "0.3"
+erased-serde = { git = "https://github.com/cfrantz/erased-serde", branch = "feature-type-name" }
 
 [dev-dependencies]
 anyhow = "1.0"
@@ -26,3 +28,7 @@ deser-hjson = "1.0.2"
 serde_bytes = "0.11"
 serde_yaml = "0.8.24"
 clap = { version="3.2.8", features=["derive"] }
+
+[features]
+type_by_name = []
+erased = ["type_by_name", "erased-serde/type_name"]

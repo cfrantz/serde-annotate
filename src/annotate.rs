@@ -39,7 +39,12 @@ pub trait Annotate {
     fn comment(&self, variant: Option<&str>, field: &MemberId) -> Option<String>;
 }
 
-type IdFn = fn() -> usize;
+#[cfg(not(feature = "type_by_name"))]
+pub type IdType = usize;
+#[cfg(feature = "type_by_name")]
+pub type IdType = &'static str;
+
+type IdFn = fn() -> IdType;
 type CastFn = unsafe fn(*const ()) -> &'static dyn Annotate;
 
 pub struct AnnotateType {
@@ -49,17 +54,40 @@ pub struct AnnotateType {
 inventory::collect!(AnnotateType);
 
 impl AnnotateType {
-    pub fn type_id<T>() -> usize
+    #[cfg(not(feature = "type_by_name"))]
+    pub fn type_id<T>() -> IdType
     where
         T: ?Sized,
     {
+        // We can't use std::any::TypeId here because we don't want to
+        // limit T to 'static.
+        //
         // Just like https://github.com/rust-lang/rust/issues/41875#issuecomment-317292888
         // We monomorphize on T and then cast the function pointer address of
         // the monomorphized `AnnotateType::type_id` function to an
         // integer identifier.
+        //
+        // This can't be relied upon because the compiler might optimize this away.
+        // In practice, it seems to work.
         Self::type_id::<T> as usize
     }
 
+    #[cfg(feature = "type_by_name")]
+    pub fn type_id<T>() -> IdType
+    where
+        T: ?Sized,
+    {
+        // Instead of using the hacky "type_id" monomorphization trick, we use
+        // the type name given back by the standard library.
+        //
+        // This can't be relied upon because the standard library makes no
+        // guarantees about the returned string. In practice, it seems to work.
+        std::any::type_name::<T>()
+    }
+
+    // This is unsafe because we give the returned trait object
+    // a 'static lifetime.  We use transmute later to shorten the
+    // lifetime down to the known lifetime.
     pub unsafe fn cast<T>(ptr: *const ()) -> &'static dyn Annotate
     where
         T: 'static + Annotate,
@@ -69,8 +97,8 @@ impl AnnotateType {
         &*(ptr as *const T)
     }
 
-    fn lookup(id: usize) -> Option<CastFn> {
-        static TYPEMAP: OnceCell<Mutex<HashMap<usize, CastFn>>> = OnceCell::new();
+    fn lookup(id: IdType) -> Option<CastFn> {
+        static TYPEMAP: OnceCell<Mutex<HashMap<IdType, CastFn>>> = OnceCell::new();
         let typemap = TYPEMAP
             .get_or_init(|| {
                 let mut types = HashMap::new();
@@ -84,15 +112,32 @@ impl AnnotateType {
         typemap.get(&id).cloned()
     }
 
+    #[cfg(not(feature = "erased"))]
     pub fn get<'a, T>(object: &'a T) -> Option<&'a dyn Annotate>
     where
-        T: ?Sized,
+        T: ?Sized + serde::Serialize,
     {
-        // Get the type-id of `object` can cast it to `Annotate` if we can.
+        // Get the type-id of `object` and cast it to `Annotate` if we can.
         let id = Self::type_id::<T>();
         Self::lookup(id).map(|cast| unsafe {
             // Shorten the lifetime to 'a, as the dyn Annotate reference is
-            // really a reinterpretation of `object`, which has lifetime 'a.
+            // really a fat pointer to `object`, which has lifetime 'a.
+            std::mem::transmute::<&'static dyn Annotate, &'a dyn Annotate>(cast(
+                object as *const T as *const (),
+            ))
+        })
+    }
+
+    #[cfg(feature = "erased")]
+    pub fn get<'a, T>(object: &'a T) -> Option<&'a dyn Annotate>
+    where
+        T: ?Sized + erased_serde::Serialize,
+    {
+        // Get the type-id of `object` and cast it to `Annotate` if we can.
+        let id = object.type_name();
+        Self::lookup(id).map(|cast| unsafe {
+            // Shorten the lifetime to 'a, as the dyn Annotate reference is
+            // really a fat pointer to `object`, which has lifetime 'a.
             std::mem::transmute::<&'static dyn Annotate, &'a dyn Annotate>(cast(
                 object as *const T as *const (),
             ))
