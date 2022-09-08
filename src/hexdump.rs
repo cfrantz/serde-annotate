@@ -1,7 +1,7 @@
-use std::fmt::Write;
 use crate::document::BytesFormat;
 use crate::error::Error;
 use regex::RegexBuilder;
+use std::fmt::Write;
 
 const HEX: &[u8; 16] = b"0123456789abcdef";
 
