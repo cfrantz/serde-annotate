@@ -10,7 +10,7 @@ pub fn serialize<T>(value: &T) -> Result<Document, Error>
 where
     T: ?Sized + ser::Serialize,
 {
-    let mut ser = AnnotatedSerializer::new(AnnotateType::get(value));
+    let mut ser = AnnotatedSerializer::new(value.as_annotate());
     value.serialize(&mut ser)
 }
 
@@ -86,7 +86,7 @@ impl<'a> AnnotatedSerializer<'a> {
         T: ?Sized + ser::Serialize,
     {
         let mut ser = ser.unwrap_or(self.clone());
-        ser.annotator = AnnotateType::get(value);
+        ser.annotator = value.as_annotate();
         value.serialize(&mut ser)
     }
 }

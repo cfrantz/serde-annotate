@@ -1,3 +1,4 @@
+#![feature(min_specialization)]
 use anyhow::{anyhow, Result};
 use clap::{ArgEnum, Parser};
 use serde_annotate::annotate::Annotate;

@@ -1,7 +1,11 @@
 pub use annotate_derive::*;
 use once_cell::sync::OnceCell;
+use std::any::TypeId;
 use std::collections::HashMap;
+use std::fmt;
 use std::sync::Mutex;
+
+use crate::{AnnotatedSerializer, Document, Error};
 
 /// Specifies the formatting options to use when serializing.
 pub enum Format {
@@ -37,6 +41,89 @@ pub enum MemberId<'a> {
 pub trait Annotate {
     fn format(&self, variant: Option<&str>, field: &MemberId) -> Option<Format>;
     fn comment(&self, variant: Option<&str>, field: &MemberId) -> Option<String>;
+    fn as_annotate(&self) -> Option<&dyn Annotate>;
+    fn thunk_serialize(&self, serializer: &mut AnnotatedSerializer) -> Result<Document, Error>;
+}
+
+/// The default implementation of Annotate returns no comments or annotations and
+/// cannot return the trait object.
+impl<T: ?Sized + serde::Serialize> Annotate for T {
+    default fn format(&self, _variant: Option<&str>, _field: &MemberId) -> Option<Format> {
+        None
+    }
+    default fn comment(&self, _variant: Option<&str>, _field: &MemberId) -> Option<String> {
+        None
+    }
+    default fn as_annotate(&self) -> Option<&dyn Annotate> {
+        None
+    }
+    default fn thunk_serialize(
+        &self,
+        serializer: &mut AnnotatedSerializer,
+    ) -> Result<Document, Error> {
+        self.serialize(serializer)
+    }
+}
+
+// We use a private trait to identify whether the Serializer passed to
+// serde::Serialize for dyn Annotate is AnnotatedSerializer.
+unsafe trait IsAnnotatedSerializer {
+    fn is_annotated_serializer(&self) -> bool;
+}
+
+unsafe impl<T: serde::Serializer> IsAnnotatedSerializer for T {
+    default fn is_annotated_serializer(&self) -> bool {
+        false
+    }
+}
+unsafe impl<'a> IsAnnotatedSerializer for &mut AnnotatedSerializer<'a> {
+    fn is_annotated_serializer(&self) -> bool {
+        true
+    }
+}
+
+// Dime-store type erasure: Implement serde::Serialize on the Annotate trait object
+// so one can pass the trait objects into `serde_annotate::serialize()` and get
+// serialized objects out.  I'm doing this because:
+// - Without some sort of `TypeId` support for non-`'static` types, its impossible
+//   to properly determine if they implement `Annotate`.
+// - Without some `TypeId` rememberance added into `erased-serde`, its impossible
+//   to properly determine if the type-erased object implemented `Annotate`.
+//
+// The strategy here (the dime-store part) is to assume the serializer will be
+// AnnotatedSerializer and just force the types with `transmute`.
+impl serde::Serialize for dyn Annotate {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        if !serializer.is_annotated_serializer() {
+            panic!(
+                "Expected to be called by AnnotatedSerializer, not {:?}",
+                std::any::type_name::<S>()
+            );
+        }
+        unsafe {
+            // If `serializer` is the correct type, then we can transmute the
+            // reference into `&mut AnnotatedSerializer` and forget the prior reference.
+            let szr: &mut AnnotatedSerializer = std::mem::transmute_copy(&serializer);
+            std::mem::forget(serializer);
+            let r = self.thunk_serialize(szr);
+            // Similarly, if the `serializer` was the correct type, we can assume the
+            // return type will be correct, and thus the transmute is a no-op... Actually,
+            // its a simple copy because `transmute` can't be sure that
+            // `Result<Document, Error>` is the same size as whatever
+            // `Result<S::Ok, S::Error>` happens to be.  They _will_ be the same size
+            // (indeed the same type) because only `AnnotatedSerializer` is permitted to
+            // call this function and it wants `Result<Document, Error>` returned).
+            let result = std::mem::transmute_copy(&r);
+            std::mem::forget(r);
+            result
+        }
+    }
+}
+
+impl fmt::Debug for dyn Annotate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "dyn Annotate({:p})", self)
+    }
 }
 
 type IdFn = fn() -> usize;

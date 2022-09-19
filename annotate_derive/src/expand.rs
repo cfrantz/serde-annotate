@@ -137,6 +137,9 @@ fn impl_struct(input: Struct) -> TokenStream {
                         _ => None,
                     }
                 }
+                fn as_annotate(&self) -> Option<&dyn Annotate> { Some(self) }
+                // We don't have to implement `thunk_serialize` because the default implementation
+                // already does what we need.
             }
             impl #name {
                 fn __type_id() -> usize {
@@ -181,6 +184,9 @@ fn impl_enum(input: Enum) -> TokenStream {
                         _ => None,
                     }
                 }
+                fn as_annotate(&self) -> Option<&dyn Annotate> { Some(self) }
+                // We don't have to implement `thunk_serialize` because the default implementation
+                // already does what we need.
             }
             impl #name {
                 fn __type_id() -> usize {
