@@ -1,7 +1,7 @@
 use anyhow::Result;
 use serde_annotate::annotate::Annotate;
 use serde_annotate::serialize;
-use serde_derive::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 
 fn fixdoc(doc: &str) -> String {
     let mut s = String::new();

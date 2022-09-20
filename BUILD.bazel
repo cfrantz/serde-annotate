@@ -1,0 +1,55 @@
+load(
+    "@rules_rust//rust:defs.bzl",
+    "rust_binary",
+    "rust_library",
+    "rust_proc_macro",
+    "rust_test",
+)
+
+package(default_visibility = [
+    "//visibility:public",
+])
+
+licenses([
+    "notice",  # Apache 2 license
+])
+
+rust_library(
+    name = "serde_annotate",
+    srcs = glob(["**/*.rs"]),
+    compile_data = ["src/relax.pest"],
+    crate_features = [
+    ],
+    crate_root = "src/lib.rs",
+    data = [],
+    edition = "2021",
+    proc_macro_deps = [
+        "//annotate_derive",
+        "//third_party/rust/crates:pest_derive",
+    ],
+    rustc_flags = [
+        "--cap-lints=allow",
+    ],
+    tags = [
+        "crate-name=serde_annotate",
+    ],
+    version = "0.1.0",
+    deps = [
+        "//third_party/rust/crates:ansi_term",
+        "//third_party/rust/crates:inventory",
+        "//third_party/rust/crates:num_traits",
+        "//third_party/rust/crates:once_cell",
+        "//third_party/rust/crates:pest",
+        "//third_party/rust/crates:regex",
+        "//third_party/rust/crates:serde",
+        "//third_party/rust/crates:thiserror",
+    ],
+)
+
+rust_test(
+    name = "serde_annotate_test",
+    crate = ":serde_annotate",
+    deps = [
+        "//third_party/rust/crates:anyhow",
+    ],
+)
