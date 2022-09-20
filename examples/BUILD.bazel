@@ -1,0 +1,52 @@
+load(
+    "@rules_rust//rust:defs.bzl",
+    "rust_binary",
+    "rust_library",
+    "rust_proc_macro",
+    "rust_test",
+)
+
+package(default_visibility = [
+    "//visibility:public",
+])
+
+licenses([
+    "notice",  # Apache 2 license
+])
+
+rust_binary(
+    name = "autoschema",
+    srcs = ["autoschema.rs"],
+    edition = "2021",
+    deps = [
+        "//:serde_annotate",
+        "//third_party/rust/crates:ansi_term",
+        "//third_party/rust/crates:anyhow",
+        "//third_party/rust/crates:clap",
+    ],
+)
+
+rust_binary(
+    name = "samples",
+    srcs = ["samples.rs"],
+    edition = "2021",
+    deps = [
+        "//:serde_annotate",
+        "//third_party/rust/crates:anyhow",
+        "//third_party/rust/crates:clap",
+        "//third_party/rust/crates:inventory",
+        "//third_party/rust/crates:serde",
+        "//third_party/rust/crates:serde_bytes",
+    ],
+)
+
+rust_binary(
+    name = "transcode",
+    srcs = ["transcode.rs"],
+    edition = "2021",
+    deps = [
+        "//:serde_annotate",
+        "//third_party/rust/crates:anyhow",
+        "//third_party/rust/crates:clap",
+    ],
+)
