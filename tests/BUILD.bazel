@@ -22,11 +22,21 @@ rust_test(
         "//:serde_annotate",
         "//third_party/rust/crates:anyhow",
         "//third_party/rust/crates:deser_hjson",
-        "//third_party/rust/crates:inventory",
         "//third_party/rust/crates:json5",
         "//third_party/rust/crates:serde",
         "//third_party/rust/crates:serde_bytes",
         "//third_party/rust/crates:serde_json",
         "//third_party/rust/crates:serde_yaml",
+    ],
+)
+
+rust_test(
+    name = "test_erased",
+    srcs = ["test_erased.rs"],
+    edition = "2021",
+    deps = [
+        "//:serde_annotate",
+        "//third_party/rust/crates:anyhow",
+        "//third_party/rust/crates:serde",
     ],
 )

@@ -7,6 +7,7 @@ def fetch_remote_crates():
 def rust_deps():
     rust_repositories(
         edition = "2021",
-        version = "1.60.0",
+        version = "nightly",
+        iso_date = "2022-09-28",
     )
     fetch_remote_crates()
