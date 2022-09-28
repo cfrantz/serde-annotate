@@ -1,6 +1,6 @@
 use serde::ser;
 
-use crate::annotate::{Annotate, AnnotateType, Format, MemberId};
+use crate::annotate::{Annotate, Format, MemberId};
 use crate::document::{BytesFormat, CommentFormat, Document, StrFormat};
 use crate::error::Error;
 use crate::hexdump;
