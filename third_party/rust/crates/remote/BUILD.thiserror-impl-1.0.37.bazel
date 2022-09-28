@@ -31,32 +31,27 @@ licenses([
 
 # Generated Targets
 
-# Unsupported target "flags" with type "example" omitted
-
-rust_library(
-    name = "inventory",
+rust_proc_macro(
+    name = "thiserror_impl",
     srcs = glob(["**/*.rs"]),
     crate_features = [
     ],
     crate_root = "src/lib.rs",
     data = [],
     edition = "2018",
-    proc_macro_deps = [
-        "@raze__ctor__0_1_23//:ctor",
-        "@raze__ghost__0_1_6//:ghost",
-    ],
     rustc_flags = [
         "--cap-lints=allow",
     ],
     tags = [
         "cargo-raze",
-        "crate-name=inventory",
+        "crate-name=thiserror-impl",
         "manual",
     ],
-    version = "0.2.3",
+    version = "1.0.37",
     # buildifier: leave-alone
     deps = [
+        "@raze__proc_macro2__1_0_45//:proc_macro2",
+        "@raze__quote__1_0_21//:quote",
+        "@raze__syn__1_0_101//:syn",
     ],
 )
-
-# Unsupported target "compiletest" with type "test" omitted
