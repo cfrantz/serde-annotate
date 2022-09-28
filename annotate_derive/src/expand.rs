@@ -121,8 +121,7 @@ fn impl_struct(input: Struct) -> TokenStream {
     quote! {
         const _: () = {
             extern crate serde_annotate;
-            extern crate inventory;
-            use serde_annotate::annotate::{Annotate, AnnotateType, Format, MemberId};
+            use serde_annotate::annotate::{Annotate, Format, MemberId};
 
             impl Annotate for #name {
                 fn format(&self, _variant: Option<&str>, field: &MemberId) -> Option<Format> {
@@ -141,23 +140,8 @@ fn impl_struct(input: Struct) -> TokenStream {
                 // We don't have to implement `thunk_serialize` because the default implementation
                 // already does what we need.
             }
-            impl #name {
-                fn __type_id() -> usize {
-                    AnnotateType::type_id::<Self>()
-                }
-                unsafe fn __cast(ptr: *const ()) -> &'static dyn Annotate {
-                    AnnotateType::cast::<Self>(ptr)
-                }
-            }
-            inventory::submit! {
-                AnnotateType {
-                    id: #name::__type_id,
-                    cast: #name::__cast,
-                }
-            }
         };
     }
-
 }
 
 fn impl_enum(input: Enum) -> TokenStream {
@@ -166,8 +150,7 @@ fn impl_enum(input: Enum) -> TokenStream {
     quote! {
         const _: () = {
             extern crate serde_annotate;
-            extern crate inventory;
-            use serde_annotate::annotate::{Annotate, AnnotateType, Format, MemberId};
+            use serde_annotate::annotate::{Annotate, Format, MemberId};
 
             impl Annotate for #name {
                 fn format(&self, variant: Option<&str>, field: &MemberId) -> Option<Format> {
@@ -187,20 +170,6 @@ fn impl_enum(input: Enum) -> TokenStream {
                 fn as_annotate(&self) -> Option<&dyn Annotate> { Some(self) }
                 // We don't have to implement `thunk_serialize` because the default implementation
                 // already does what we need.
-            }
-            impl #name {
-                fn __type_id() -> usize {
-                    AnnotateType::type_id::<Self>()
-                }
-                unsafe fn __cast(ptr: *const ()) -> &'static dyn Annotate {
-                    AnnotateType::cast::<Self>(ptr)
-                }
-            }
-            inventory::submit! {
-                AnnotateType {
-                    id: #name::__type_id,
-                    cast: #name::__cast,
-                }
             }
         };
     }
