@@ -36,7 +36,6 @@ rust_library(
     version = "0.1.0",
     deps = [
         "//third_party/rust/crates:ansi_term",
-        "//third_party/rust/crates:inventory",
         "//third_party/rust/crates:num_traits",
         "//third_party/rust/crates:once_cell",
         "//third_party/rust/crates:pest",

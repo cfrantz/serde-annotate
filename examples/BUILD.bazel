@@ -34,7 +34,6 @@ rust_binary(
         "//:serde_annotate",
         "//third_party/rust/crates:anyhow",
         "//third_party/rust/crates:clap",
-        "//third_party/rust/crates:inventory",
         "//third_party/rust/crates:serde",
         "//third_party/rust/crates:serde_bytes",
     ],
