@@ -1,4 +1,5 @@
 #![feature(min_specialization)]
+
 pub mod annotate;
 mod color;
 mod de;
@@ -12,6 +13,8 @@ mod relax;
 mod ser;
 mod yaml;
 
+pub use annotate::Annotate;
+pub use annotate_derive::*;
 pub use color::ColorProfile;
 pub use de::{from_str, Deserialize, Deserializer};
 pub use doc_iter::DocPath;

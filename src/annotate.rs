@@ -1,4 +1,3 @@
-pub use annotate_derive::*;
 use std::fmt;
 
 use crate::{AnnotatedSerializer, Document, Error};
