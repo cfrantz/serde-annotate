@@ -1,8 +1,8 @@
 #![feature(min_specialization)]
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use serde_annotate::annotate::Annotate;
 use serde_annotate::serialize;
+use serde_annotate::Annotate;
 
 fn fixdoc(doc: &str) -> String {
     let mut s = String::new();

@@ -2,8 +2,7 @@
 use anyhow::{anyhow, Result};
 use clap::{ArgEnum, Parser};
 use serde::{Deserialize, Serialize};
-use serde_annotate::annotate::Annotate;
-use serde_annotate::{serialize, ColorProfile};
+use serde_annotate::{serialize, Annotate, ColorProfile};
 
 #[derive(Serialize, Deserialize, Annotate, Debug, PartialEq)]
 struct Coordinate {
