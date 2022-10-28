@@ -59,7 +59,7 @@ impl Deserialize {
 
 /// A `Deserializer` deserializes a parsed document.
 pub struct Deserializer<'de> {
-    doc: &'de Document,
+    pub(crate) doc: &'de Document,
 }
 
 impl<'de> Deserializer<'de> {

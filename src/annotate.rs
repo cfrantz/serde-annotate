@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::{AnnotatedSerializer, Document, Error};
+use crate::{AnnotatedSerializer, Deserializer, Document, Error};
 
 /// Specifies the formatting options to use when serializing.
 pub enum Format {
@@ -61,18 +61,43 @@ impl<T: ?Sized + serde::Serialize> Annotate for T {
 }
 
 // We use a private trait to identify whether the Serializer passed to
-// serde::Serialize for dyn Annotate is AnnotatedSerializer.
-unsafe trait IsAnnotatedSerializer {
-    fn is_annotated_serializer(&self) -> bool;
+// various functions is our Serializer.
+pub(crate) unsafe trait IsSerializer {
+    fn is_serde_annotate(&self) -> bool;
 }
 
-unsafe impl<T: serde::Serializer> IsAnnotatedSerializer for T {
-    default fn is_annotated_serializer(&self) -> bool {
+unsafe impl<T: serde::Serializer> IsSerializer for T {
+    default fn is_serde_annotate(&self) -> bool {
         false
     }
 }
-unsafe impl<'a> IsAnnotatedSerializer for &mut AnnotatedSerializer<'a> {
-    fn is_annotated_serializer(&self) -> bool {
+
+unsafe impl<'a> IsSerializer for &mut AnnotatedSerializer<'a> {
+    fn is_serde_annotate(&self) -> bool {
+        true
+    }
+}
+
+// This marker trait is to avoid specifying lifetimes in the default
+// implementation.  When I specify lifetimes in the default impl, the
+// compiler complains that the specialized impl repeats parameter `'de`.
+trait _IsDeserializer {}
+impl<'de, T: serde::Deserializer<'de>> _IsDeserializer for T {}
+
+// We use a private trait to identify whether the Deserializer passed to
+// various functions is our Deserializer.
+pub(crate) unsafe trait IsDeserializer {
+    fn is_serde_annotate(&self) -> bool;
+}
+
+unsafe impl<T: _IsDeserializer> IsDeserializer for T {
+    default fn is_serde_annotate(&self) -> bool {
+        false
+    }
+}
+
+unsafe impl<'de> IsDeserializer for &mut Deserializer<'de> {
+    fn is_serde_annotate(&self) -> bool {
         true
     }
 }
@@ -89,7 +114,7 @@ unsafe impl<'a> IsAnnotatedSerializer for &mut AnnotatedSerializer<'a> {
 // AnnotatedSerializer and just force the types with `transmute`.
 impl serde::Serialize for dyn Annotate {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        if !serializer.is_annotated_serializer() {
+        if !serializer.is_serde_annotate() {
             panic!(
                 "Expected to be called by AnnotatedSerializer, not {:?}",
                 std::any::type_name::<S>()
