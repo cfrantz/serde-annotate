@@ -40,3 +40,15 @@ rust_test(
         "//third_party/rust/crates:serde",
     ],
 )
+
+rust_test(
+    name = "test_partial",
+    srcs = ["test_partial.rs"],
+    edition = "2021",
+    deps = [
+        "//:serde_annotate",
+        "//third_party/rust/crates:anyhow",
+        "//third_party/rust/crates:serde",
+        "//third_party/rust/crates:serde_json",
+    ],
+)
