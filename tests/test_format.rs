@@ -265,11 +265,15 @@ enum NesAddress {
     Chr(#[annotate(format=hex)] u8, #[annotate(format=hex)] u16),
 }
 
+#[derive(Serialize, Deserialize, Annotate, Debug, PartialEq)]
+struct CpuAddress(#[annotate(format=hex)] u16);
+
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 struct Addresses {
     a: NesAddress,
     b: NesAddress,
-    c: NesAddress,
+    c: Option<NesAddress>,
+    d: CpuAddress,
 }
 
 #[test]
@@ -277,7 +281,8 @@ fn test_nes_addresses() -> Result<()> {
     let value = Addresses {
         a: NesAddress::File(0x4010),
         b: NesAddress::Prg(1, 0x8000),
-        c: NesAddress::Chr(2, 0x400),
+        c: Some(NesAddress::Chr(2, 0x400)),
+        d: CpuAddress(0xFFFA),
     };
 
     tester!(
@@ -294,7 +299,8 @@ fn test_nes_addresses() -> Result<()> {
           },
           "c": {
             "Chr": [2, 1024]
-          }
+          },
+          "d": 65530
         }"#
     );
 
@@ -315,7 +321,8 @@ fn test_nes_addresses() -> Result<()> {
           c: {
             // NES CHR bank:address
             Chr: [0x2, 0x400]
-          }
+          },
+          d: 0xFFFA
         }"#
     );
 
@@ -333,7 +340,8 @@ fn test_nes_addresses() -> Result<()> {
             Prg: [0x1, 0x8000]
           c:
             # NES CHR bank:address
-            Chr: [0x2, 0x400]"#
+            Chr: [0x2, 0x400]
+          d: 0xFFFA"#
     );
 
     Ok(())

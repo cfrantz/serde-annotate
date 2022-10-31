@@ -186,7 +186,7 @@ impl<'s, 'a> ser::Serializer for &'s mut AnnotatedSerializer<'a> {
     where
         T: ?Sized + ser::Serialize,
     {
-        value.serialize(self)
+        self.serialize(value, None)
     }
 
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
@@ -214,7 +214,13 @@ impl<'s, 'a> ser::Serializer for &'s mut AnnotatedSerializer<'a> {
     where
         T: ?Sized + ser::Serialize,
     {
-        value.serialize(self)
+        let field = MemberId::Index(0);
+        let node = self.serialize(value, self.annotate(None, &field))?;
+        if let Some(c) = self.comment(None, &field) {
+            Ok(Document::Fragment(vec![c, node]))
+        } else {
+            Ok(node)
+        }
     }
 
     fn serialize_newtype_variant<T>(
