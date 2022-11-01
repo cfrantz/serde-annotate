@@ -210,13 +210,29 @@ impl JsonEmitter {
             Document::Null => self.emit_null(w),
             Document::Compact(d) => self.emit_compact(w, d),
             Document::Fragment(ds) => {
-                for d in ds {
-                    self.emit_node(w, d)?;
-                    if d.has_value() {
-                        self.writeln(w, "")?;
-                        self.emit_indent(w)?;
+                match &ds[..] {
+                    // Currently, an enum unit-variant is the only place in the serializer where a
+                    // Fragment is constructed placing the comment after the node.  For this case,
+                    // we want to emit the variant name followed by the comment on the same line.
+                    [n, Document::Comment(c, f)] => {
+                        self.emit_node(w, n)?;
+                        if !self.compact && !self.comment.is_empty() {
+                            write!(w, " ")?;
+                            self.emit_comment(w, c, f)?;
+                        }
                     }
-                }
+                    _ => {
+                        let mut prior_val = false;
+                        for d in ds {
+                            if prior_val {
+                                self.writeln(w, "")?;
+                                self.emit_indent(w)?;
+                            }
+                            self.emit_node(w, d)?;
+                            prior_val = d.has_value();
+                        }
+                    }
+                };
                 Ok(())
             }
         }

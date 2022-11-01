@@ -89,7 +89,7 @@ fn impl_variants(variants: &[Variant]) -> (Vec<TokenStream>, Vec<TokenStream>) {
             quote! {
                 #variant => match field {
                     MemberId::Variant => #vformat,
-                    #(#formats),*,
+                    #(#formats,)*
                     _ => None,
                 }
             }
@@ -104,7 +104,7 @@ fn impl_variants(variants: &[Variant]) -> (Vec<TokenStream>, Vec<TokenStream>) {
             quote! {
                 #variant => match field {
                     MemberId::Variant => #vcomment,
-                    #(#comments),*,
+                    #(#comments,)*
                     _ => None,
                 }
             }
@@ -126,13 +126,13 @@ fn impl_struct(input: Struct) -> TokenStream {
             impl Annotate for #name {
                 fn format(&self, _variant: Option<&str>, field: &MemberId) -> Option<Format> {
                     match field {
-                        #(#formats),*,
+                        #(#formats,)*
                         _ => None,
                     }
                 }
                 fn comment(&self, _variant: Option<&str>, field: &MemberId) -> Option<String> {
                     match field {
-                        #(#comments),*,
+                        #(#comments,)*
                         _ => None,
                     }
                 }
@@ -156,14 +156,14 @@ fn impl_enum(input: Enum) -> TokenStream {
                 fn format(&self, variant: Option<&str>, field: &MemberId) -> Option<Format> {
                     let variant = variant?;
                     match variant {
-                        #(#formats),*,
+                        #(#formats,)*
                         _ => None,
                     }
                 }
                 fn comment(&self, variant: Option<&str>, field: &MemberId) -> Option<String> {
                     let variant = variant?;
                     match variant {
-                        #(#comments),*,
+                        #(#comments,)*
                         _ => None,
                     }
                 }
