@@ -203,7 +203,12 @@ impl<'s, 'a> ser::Serializer for &'s mut AnnotatedSerializer<'a> {
         _variant_index: u32,
         variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
-        self.serialize_str(variant)
+        let node = self.serialize_str(variant)?;
+        if let Some(c) = self.comment(Some(variant), &MemberId::Variant) {
+            Ok(Document::Fragment(vec![node, c]))
+        } else {
+            Ok(node)
+        }
     }
 
     fn serialize_newtype_struct<T>(

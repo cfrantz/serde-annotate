@@ -263,6 +263,8 @@ enum NesAddress {
     Prg(#[annotate(format=hex)] u8, #[annotate(format=hex)] u16),
     #[annotate(format=compact, comment="NES CHR bank:address")]
     Chr(#[annotate(format=hex)] u8, #[annotate(format=hex)] u16),
+    #[annotate(comment = "Bad Address")]
+    Invalid,
 }
 
 #[derive(Serialize, Deserialize, Annotate, Debug, PartialEq)]
@@ -274,6 +276,7 @@ struct Addresses {
     b: NesAddress,
     c: Option<NesAddress>,
     d: CpuAddress,
+    e: NesAddress,
 }
 
 #[test]
@@ -283,6 +286,7 @@ fn test_nes_addresses() -> Result<()> {
         b: NesAddress::Prg(1, 0x8000),
         c: Some(NesAddress::Chr(2, 0x400)),
         d: CpuAddress(0xFFFA),
+        e: NesAddress::Invalid,
     };
 
     tester!(
@@ -300,7 +304,8 @@ fn test_nes_addresses() -> Result<()> {
           "c": {
             "Chr": [2, 1024]
           },
-          "d": 65530
+          "d": 65530,
+          "e": "Invalid"
         }"#
     );
 
@@ -322,7 +327,8 @@ fn test_nes_addresses() -> Result<()> {
             // NES CHR bank:address
             Chr: [0x2, 0x400]
           },
-          d: 0xFFFA
+          d: 0xFFFA,
+          e: "Invalid" // Bad Address
         }"#
     );
 
@@ -341,7 +347,8 @@ fn test_nes_addresses() -> Result<()> {
           c:
             # NES CHR bank:address
             Chr: [0x2, 0x400]
-          d: 0xFFFA"#
+          d: 0xFFFA
+          e: Invalid # Bad Address"#
     );
 
     Ok(())
