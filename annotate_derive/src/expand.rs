@@ -140,6 +140,7 @@ fn impl_struct(input: Struct) -> TokenStream {
                 // We don't have to implement `thunk_serialize` because the default implementation
                 // already does what we need.
             }
+            serde_annotate::annotate_ref!(#name);
         };
     }
 }
@@ -171,6 +172,7 @@ fn impl_enum(input: Enum) -> TokenStream {
                 // We don't have to implement `thunk_serialize` because the default implementation
                 // already does what we need.
             }
+            serde_annotate::annotate_ref!(#name);
         };
     }
 }

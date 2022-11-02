@@ -60,6 +60,36 @@ impl<T: ?Sized + serde::Serialize> Annotate for T {
     }
 }
 
+// Serde explicitly implements Serialize on &T where T: Serialize.  This
+// causes min_specialization to select the default implementation for &T
+// even though there is a specialized implementation available for T.
+//
+// The annotate_derive crate uses this macro to create the additional
+// specializations needed.
+#[macro_export]
+macro_rules! annotate_ref {
+    ($ty:ty) => {
+        $crate::__annotate_ref!(&$ty);
+    };
+}
+
+#[macro_export]
+macro_rules! __annotate_ref {
+    ($ty:ty) => {
+        impl Annotate for $ty {
+            fn format(&self, variant: Option<&str>, field: &MemberId) -> Option<Format> {
+                (**self).format(variant, field)
+            }
+            fn comment(&self, variant: Option<&str>, field: &MemberId) -> Option<String> {
+                (**self).comment(variant, field)
+            }
+            fn as_annotate(&self) -> Option<&dyn Annotate> {
+                (**self).as_annotate()
+            }
+        }
+    };
+}
+
 // We use a private trait to identify whether the Serializer passed to
 // various functions is our Serializer.
 pub(crate) unsafe trait IsSerializer {
