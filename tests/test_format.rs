@@ -275,8 +275,11 @@ struct Addresses {
     a: NesAddress,
     b: NesAddress,
     c: Option<NesAddress>,
-    d: CpuAddress,
-    e: NesAddress,
+    // Note: using a vec here causes the serializer to request
+    // serializing &CpuAddress rather than CpuAddress.  This tests
+    // that the specializations of Annotate for &T are working.
+    vectors: Vec<CpuAddress>,
+    inv: NesAddress,
 }
 
 #[test]
@@ -285,8 +288,8 @@ fn test_nes_addresses() -> Result<()> {
         a: NesAddress::File(0x4010),
         b: NesAddress::Prg(1, 0x8000),
         c: Some(NesAddress::Chr(2, 0x400)),
-        d: CpuAddress(0xFFFA),
-        e: NesAddress::Invalid,
+        vectors: vec![CpuAddress(0xFFFA), CpuAddress(0xFFFC), CpuAddress(0xFFFE)],
+        inv: NesAddress::Invalid,
     };
 
     tester!(
@@ -304,8 +307,12 @@ fn test_nes_addresses() -> Result<()> {
           "c": {
             "Chr": [2, 1024]
           },
-          "d": 65530,
-          "e": "Invalid"
+          "vectors": [
+            65530,
+            65532,
+            65534
+          ],
+          "inv": "Invalid"
         }"#
     );
 
@@ -327,8 +334,12 @@ fn test_nes_addresses() -> Result<()> {
             // NES CHR bank:address
             Chr: [0x2, 0x400]
           },
-          d: 0xFFFA,
-          e: "Invalid" // Bad Address
+          vectors: [
+            0xFFFA,
+            0xFFFC,
+            0xFFFE
+          ],
+          inv: "Invalid" // Bad Address
         }"#
     );
 
@@ -347,8 +358,11 @@ fn test_nes_addresses() -> Result<()> {
           c:
             # NES CHR bank:address
             Chr: [0x2, 0x400]
-          d: 0xFFFA
-          e: Invalid # Bad Address"#
+          vectors:
+            - 0xFFFA
+            - 0xFFFC
+            - 0xFFFE
+          inv: Invalid # Bad Address"#
     );
 
     Ok(())
