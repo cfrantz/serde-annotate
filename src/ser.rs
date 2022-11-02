@@ -204,11 +204,15 @@ impl<'s, 'a> ser::Serializer for &'s mut AnnotatedSerializer<'a> {
         variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
         let node = self.serialize_str(variant)?;
-        if let Some(c) = self.comment(Some(variant), &MemberId::Variant) {
-            Ok(Document::Fragment(vec![node, c]))
-        } else {
-            Ok(node)
-        }
+        // TODO(serde-annotate#6): currently, placing a comment on a unit variant results in
+        // ugly (json) or bad (yaml) documents.  For now, omit comments on
+        // unit variants until we refactor comment emitting.
+        //if let Some(c) = self.comment(Some(variant), &MemberId::Variant) {
+        //    Ok(Document::Fragment(vec![c, node]))
+        //} else {
+        //    Ok(node)
+        //}
+        Ok(node)
     }
 
     fn serialize_newtype_struct<T>(
@@ -221,11 +225,15 @@ impl<'s, 'a> ser::Serializer for &'s mut AnnotatedSerializer<'a> {
     {
         let field = MemberId::Index(0);
         let node = self.serialize(value, self.annotate(None, &field))?;
-        if let Some(c) = self.comment(None, &field) {
-            Ok(Document::Fragment(vec![c, node]))
-        } else {
-            Ok(node)
-        }
+        // TODO(serde-annotate#6): currently, placing a comment on a newtype structs results in
+        // ugly (json) or bad (yaml) documents.  For now, omit comments on
+        // unit variants until we refactor comment emitting.
+        //if let Some(c) = self.comment(None, &field) {
+        //    Ok(Document::Fragment(vec![c, node]))
+        //} else {
+        //    Ok(node)
+        //}
+        Ok(node)
     }
 
     fn serialize_newtype_variant<T>(
