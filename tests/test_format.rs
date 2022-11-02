@@ -263,12 +263,14 @@ enum NesAddress {
     Prg(#[annotate(format=hex)] u8, #[annotate(format=hex)] u16),
     #[annotate(format=compact, comment="NES CHR bank:address")]
     Chr(#[annotate(format=hex)] u8, #[annotate(format=hex)] u16),
+    // TODO(serde-annotate#6): Currently, we do not emit comments for unit variants.
     #[annotate(comment = "Bad Address")]
     Invalid,
 }
 
+// TODO(serde-annotate#6): Currently, we do not emit comments for newtype structs.
 #[derive(Serialize, Deserialize, Annotate, Debug, PartialEq)]
-struct CpuAddress(#[annotate(format=hex)] u16);
+struct CpuAddress(#[annotate(format=hex, comment="CPU Address")] u16);
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 struct Addresses {
@@ -339,7 +341,7 @@ fn test_nes_addresses() -> Result<()> {
             0xFFFC,
             0xFFFE
           ],
-          inv: "Invalid" // Bad Address
+          inv: "Invalid"
         }"#
     );
 
@@ -362,7 +364,7 @@ fn test_nes_addresses() -> Result<()> {
             - 0xFFFA
             - 0xFFFC
             - 0xFFFE
-          inv: Invalid # Bad Address"#
+          inv: Invalid"#
     );
 
     Ok(())
