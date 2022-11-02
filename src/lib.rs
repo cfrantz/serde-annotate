@@ -21,7 +21,7 @@ pub use de::{from_str, Deserialize, Deserializer};
 pub use doc_iter::DocPath;
 pub use document::{BytesFormat, CommentFormat, Document, StrFormat};
 pub use error::Error;
-pub use integer::{Int, IntValue};
+pub use integer::{Base, Int, IntValue};
 pub use json::Json;
 pub use ser::{serialize, AnnotatedSerializer};
 pub use yaml::Yaml;
