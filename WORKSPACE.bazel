@@ -1,8 +1,29 @@
 workspace(name = "lowrisc_serde_annotate")
 
-# Rust Toolchain + crates.io Dependencies
+# Rust Toolchain
 load("//third_party/rust:repos.bzl", "rust_repos")
+
 rust_repos()
 
 load("//third_party/rust:deps.bzl", "rust_deps")
+
 rust_deps()
+
+# Use crate_universe to pull in crates.io dependencies specified in
+# the Cargo.toml files.
+load("@rules_rust//crate_universe:repositories.bzl", "crate_universe_dependencies")
+crate_universe_dependencies()
+
+load("@rules_rust//crate_universe:defs.bzl", "crates_repository")
+crates_repository(
+    name = "crate_index",
+    cargo_lockfile = "//:Cargo.lock",
+    lockfile = "//:Cargo.Bazel.lock",
+    manifests = [
+        "//:Cargo.toml",
+        "//annotate_derive:Cargo.toml",
+    ],
+)
+
+load("@crate_index//:defs.bzl", "crate_repositories")
+crate_repositories()

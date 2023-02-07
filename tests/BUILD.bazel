@@ -18,15 +18,19 @@ rust_test(
     name = "test_format",
     srcs = ["test_format.rs"],
     edition = "2021",
+    proc_macro_deps = [
+        "//annotate_derive",
+        "@crate_index//:serde_derive",
+    ],
     deps = [
         "//:serde_annotate",
-        "//third_party/rust/crates:anyhow",
-        "//third_party/rust/crates:deser_hjson",
-        "//third_party/rust/crates:json5",
-        "//third_party/rust/crates:serde",
-        "//third_party/rust/crates:serde_bytes",
-        "//third_party/rust/crates:serde_json",
-        "//third_party/rust/crates:serde_yaml",
+        "@crate_index//:anyhow",
+        "@crate_index//:deser-hjson",
+        "@crate_index//:json5",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_json",
+        "@crate_index//:serde_yaml",
     ],
 )
 
@@ -34,10 +38,14 @@ rust_test(
     name = "test_erased",
     srcs = ["test_erased.rs"],
     edition = "2021",
+    proc_macro_deps = [
+        "//annotate_derive",
+        "@crate_index//:serde_derive",
+    ],
     deps = [
         "//:serde_annotate",
-        "//third_party/rust/crates:anyhow",
-        "//third_party/rust/crates:serde",
+        "@crate_index//:anyhow",
+        "@crate_index//:serde",
     ],
 )
 
@@ -45,10 +53,13 @@ rust_test(
     name = "test_partial",
     srcs = ["test_partial.rs"],
     edition = "2021",
+    proc_macro_deps = [
+        "//annotate_derive",
+    ],
     deps = [
         "//:serde_annotate",
-        "//third_party/rust/crates:anyhow",
-        "//third_party/rust/crates:serde",
-        "//third_party/rust/crates:serde_json",
+        "@crate_index//:anyhow",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
     ],
 )

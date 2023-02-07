@@ -1,3 +1,4 @@
+load("@crate_index//:defs.bzl", "aliases", "all_crate_deps")
 load(
     "@rules_rust//rust:defs.bzl",
     "rust_binary",
@@ -10,6 +11,11 @@ package(default_visibility = [
     "//visibility:public",
 ])
 
+exports_files([
+    "Cargo.toml",
+    "Cargo.lock",
+])
+
 licenses([
     "notice",  # Apache 2 license
 ])
@@ -17,6 +23,7 @@ licenses([
 rust_library(
     name = "serde_annotate",
     srcs = glob(["**/*.rs"]),
+    aliases = aliases(),
     compile_data = ["src/relax.pest"],
     crate_features = [
     ],
@@ -25,7 +32,7 @@ rust_library(
     edition = "2021",
     proc_macro_deps = [
         "//annotate_derive",
-        "//third_party/rust/crates:pest_derive",
+        "@crate_index//:pest_derive",
     ],
     rustc_flags = [
         "--cap-lints=allow",
@@ -35,20 +42,32 @@ rust_library(
     ],
     version = "0.1.0",
     deps = [
-        "//third_party/rust/crates:ansi_term",
-        "//third_party/rust/crates:num_traits",
-        "//third_party/rust/crates:once_cell",
-        "//third_party/rust/crates:pest",
-        "//third_party/rust/crates:regex",
-        "//third_party/rust/crates:serde",
-        "//third_party/rust/crates:thiserror",
+        "@crate_index//:ansi_term",
+        "@crate_index//:num-traits",
+        "@crate_index//:once_cell",
+        "@crate_index//:pest",
+        "@crate_index//:regex",
+        "@crate_index//:serde",
+        "@crate_index//:thiserror",
     ],
 )
 
 rust_test(
     name = "serde_annotate_test",
+    aliases = aliases(
+        normal_dev = True,
+        proc_macro_dev = True,
+    ),
     crate = ":serde_annotate",
+    proc_macro_deps = [
+        "@crate_index//:serde_derive",
+    ],
     deps = [
-        "//third_party/rust/crates:anyhow",
+        "@crate_index//:anyhow",
+        "@crate_index//:deser-hjson",
+        "@crate_index//:json5",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_json",
+        "@crate_index//:serde_yaml",
     ],
 )
