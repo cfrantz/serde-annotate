@@ -18,11 +18,16 @@ rust_binary(
     name = "autoschema",
     srcs = ["autoschema.rs"],
     edition = "2021",
+    proc_macro_deps = [
+        "//annotate_derive",
+        "@crate_index//:serde_derive",
+    ],
     deps = [
         "//:serde_annotate",
-        "//third_party/rust/crates:ansi_term",
-        "//third_party/rust/crates:anyhow",
-        "//third_party/rust/crates:clap",
+        "@crate_index//:ansi_term",
+        "@crate_index//:anyhow",
+        "@crate_index//:clap",
+        "@crate_index//:serde",
     ],
 )
 
@@ -30,12 +35,17 @@ rust_binary(
     name = "samples",
     srcs = ["samples.rs"],
     edition = "2021",
+    proc_macro_deps = [
+        "//annotate_derive",
+        "@crate_index//:serde_derive",
+    ],
     deps = [
         "//:serde_annotate",
-        "//third_party/rust/crates:anyhow",
-        "//third_party/rust/crates:clap",
-        "//third_party/rust/crates:serde",
-        "//third_party/rust/crates:serde_bytes",
+        "@crate_index//:ansi_term",
+        "@crate_index//:anyhow",
+        "@crate_index//:clap",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
     ],
 )
 
@@ -43,9 +53,15 @@ rust_binary(
     name = "transcode",
     srcs = ["transcode.rs"],
     edition = "2021",
+    proc_macro_deps = [
+        "//annotate_derive",
+        "@crate_index//:serde_derive",
+    ],
     deps = [
         "//:serde_annotate",
-        "//third_party/rust/crates:anyhow",
-        "//third_party/rust/crates:clap",
+        "@crate_index//:ansi_term",
+        "@crate_index//:anyhow",
+        "@crate_index//:clap",
+        "@crate_index//:serde",
     ],
 )

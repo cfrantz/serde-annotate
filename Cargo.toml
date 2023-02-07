@@ -31,22 +31,3 @@ members = [
     ".",
     "annotate_derive",
 ]
-
-[workspace.metadata.raze]
-workspace_path = "//third_party/rust/crates"
-experimental_api = true
-package_aliases_dir = "third_party/rust/crates"
-genmode = "Remote"
-
-targets = [
-    "x86_64-unknown-linux-gnu",
-]
-
-[package.metadata.raze.crates.json5.'*']
-compile_data_attr = '[ "src/json5.pest" ]'
-
-[package.metadata.raze.crates.clap.'*']
-compile_data_attr = 'glob([ "*.md", "**/*.md" ])'
-
-[package.metadata.raze.crates.clap_derive.'*']
-compile_data_attr = 'glob([ "*.md", "**/*.md" ])'
