@@ -21,7 +21,8 @@ crates_repository(
     lockfile = "//:Cargo.Bazel.lock",
     manifests = [
         "//:Cargo.toml",
-        "//annotate_derive:Cargo.toml",
+        "//serde_annotate:Cargo.toml",
+        "//serde_annotate_derive:Cargo.toml",
     ],
 )
 

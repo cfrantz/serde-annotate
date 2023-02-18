@@ -19,7 +19,7 @@ licenses([
 ])
 
 rust_proc_macro(
-    name = "annotate_derive",
+    name = "serde_annotate_derive",
     srcs = glob(["**/*.rs"]),
     crate_features = [
     ],
@@ -30,7 +30,7 @@ rust_proc_macro(
         "--cap-lints=allow",
     ],
     tags = [
-        "crate-name=annotate_derive",
+        "crate-name=serde_annotate_derive",
     ],
     version = "0.1.0",
     deps = [
