@@ -14,54 +14,52 @@ licenses([
     "notice",  # Apache 2 license
 ])
 
-rust_binary(
-    name = "autoschema",
-    srcs = ["autoschema.rs"],
+rust_test(
+    name = "test_format",
+    srcs = ["test_format.rs"],
     edition = "2021",
     proc_macro_deps = [
-        "//annotate_derive",
+        "//serde_annotate_derive",
         "@crate_index//:serde_derive",
     ],
     deps = [
-        "//:serde_annotate",
-        "@crate_index//:ansi_term",
+        "//serde_annotate",
         "@crate_index//:anyhow",
-        "@crate_index//:clap",
-        "@crate_index//:serde",
-    ],
-)
-
-rust_binary(
-    name = "samples",
-    srcs = ["samples.rs"],
-    edition = "2021",
-    proc_macro_deps = [
-        "//annotate_derive",
-        "@crate_index//:serde_derive",
-    ],
-    deps = [
-        "//:serde_annotate",
-        "@crate_index//:ansi_term",
-        "@crate_index//:anyhow",
-        "@crate_index//:clap",
+        "@crate_index//:deser-hjson",
+        "@crate_index//:json5",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
+        "@crate_index//:serde_json",
+        "@crate_index//:serde_yaml",
     ],
 )
 
-rust_binary(
-    name = "transcode",
-    srcs = ["transcode.rs"],
+rust_test(
+    name = "test_erased",
+    srcs = ["test_erased.rs"],
     edition = "2021",
     proc_macro_deps = [
-        "//annotate_derive",
+        "//serde_annotate_derive",
         "@crate_index//:serde_derive",
     ],
     deps = [
-        "//:serde_annotate",
-        "@crate_index//:ansi_term",
+        "//serde_annotate",
         "@crate_index//:anyhow",
-        "@crate_index//:clap",
         "@crate_index//:serde",
+    ],
+)
+
+rust_test(
+    name = "test_partial",
+    srcs = ["test_partial.rs"],
+    edition = "2021",
+    proc_macro_deps = [
+        "//serde_annotate_derive",
+    ],
+    deps = [
+        "//serde_annotate",
+        "@crate_index//:anyhow",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
     ],
 )
