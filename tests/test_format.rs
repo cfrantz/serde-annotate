@@ -517,3 +517,58 @@ fn test_bytes() -> Result<()> {
 
     Ok(())
 }
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[serde(untagged)]
+enum Data {
+    None,
+    Bool(bool),
+    Int(i64),
+    Str(String),
+    List(Vec<Data>),
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+struct VariousData {
+    none: Data,
+    boolean: Data,
+    integer: Data,
+    string: Data,
+    list: Data,
+}
+
+#[test]
+fn test_untagged_data() -> Result<()> {
+    let value = VariousData {
+        none: Data::None,
+        boolean: Data::Bool(true),
+        integer: Data::Int(100),
+        string: Data::Str("hello".into()),
+        list: Data::List(vec![
+            Data::None,
+            Data::Bool(false),
+            Data::Int(200),
+            Data::Str("bye".into()),
+        ]),
+    };
+
+    tester!(
+        relax, // Use the 'relax' parser to test our deserializer.
+        VariousData,
+        &value,
+        r#"
+        {
+          "none": null,
+          "boolean": true,
+          "integer": 100,
+          "string": "hello",
+          "list": [
+            null,
+            false,
+            200,
+            "bye"
+          ]
+        }"#
+    );
+    Ok(())
+}

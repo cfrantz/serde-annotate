@@ -85,11 +85,28 @@ where
 impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     type Error = Error;
 
-    fn deserialize_any<V>(self, _v: V) -> Result<V::Value>
+    fn deserialize_any<V>(self, v: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
-        unimplemented!();
+        match self.doc {
+            Document::String(s, _) => v.visit_str(s.as_str()),
+            Document::StaticStr(s, _) => v.visit_str(s),
+            Document::Boolean(b) => v.visit_bool(*b),
+            Document::Int(i) => v.visit_i64(i.into()),
+            Document::Float(f) => v.visit_f64(*f),
+            Document::Mapping(map) => {
+                v.visit_map(Sequence::new(map.iter().filter(|f| f.has_value())))
+            }
+            Document::Sequence(seq) => {
+                v.visit_seq(Sequence::new(seq.iter().filter(|f| f.has_value())))
+            }
+            Document::Bytes(b) => v.visit_bytes(b.as_slice()),
+            Document::Null => v.visit_unit(),
+            Document::Compact(_) => unimplemented!(),
+            Document::Fragment(_) => unimplemented!(),
+            Document::Comment(_, _) => unimplemented!(),
+        }
     }
     fn deserialize_ignored_any<V>(self, _v: V) -> Result<V::Value>
     where
