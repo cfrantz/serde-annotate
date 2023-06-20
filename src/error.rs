@@ -32,7 +32,7 @@ pub enum Error {
     CharTryFromError(#[from] CharTryFromError),
     #[error("document structure error: expected {0} but got {1}")]
     StructureError(&'static str, &'static str),
-    #[error("syntax error: {0} at {1}:{2}\n| {3}\n| {4:>2$}")]
+    #[error("syntax error: {0} at {1}:{col}\n| {3}\n| {4:>col$}", col = .2)]
     SyntaxError(String, usize, usize, String, &'static str),
 }
 
