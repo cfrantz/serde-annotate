@@ -1,9 +1,9 @@
 use anyhow::Result;
-use clap::{ArgEnum, Parser};
+use clap::{Parser, ValueEnum};
 use serde_annotate::{ColorProfile, Document};
 use std::path::PathBuf;
 
-#[derive(ArgEnum, Clone, Copy, Debug)]
+#[derive(ValueEnum, Clone, Copy, Debug)]
 enum Format {
     Json,
     Json5,
@@ -13,7 +13,7 @@ enum Format {
 
 #[derive(Parser, Debug)]
 struct Args {
-    #[clap(short, long, arg_enum, value_parser)]
+    #[clap(short, long, value_enum, value_parser)]
     format: Format,
 
     #[clap(short, long, value_parser)]

@@ -1,6 +1,6 @@
 #![feature(min_specialization)]
 use anyhow::{anyhow, Result};
-use clap::{ArgEnum, Parser};
+use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
 use serde_annotate::{serialize, Annotate, ColorProfile};
 
@@ -86,7 +86,7 @@ struct Everything {
     no_value: Option<String>,
 }
 
-#[derive(ArgEnum, Clone, Copy, Debug)]
+#[derive(ValueEnum, Clone, Copy, Debug)]
 enum Format {
     Json,
     Json5,
@@ -99,7 +99,7 @@ struct Args {
     #[clap(short, long, value_parser)]
     structure: String,
 
-    #[clap(short, long, arg_enum, value_parser)]
+    #[clap(short, long, value_enum, value_parser)]
     format: Format,
 
     #[clap(short, long, value_parser)]
