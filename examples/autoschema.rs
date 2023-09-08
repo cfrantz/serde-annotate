@@ -7,7 +7,7 @@
 ///
 /// IOW, this program helps you do what you should have done when you thought
 /// "Who cares? Its just JSON! It's schema free!".
-use ansi_term::{Color, Style};
+use anstyle::{AnsiColor, Style};
 use anyhow::Result;
 use clap::Parser;
 use serde_annotate::{DocPath, Document, Int};
@@ -23,8 +23,8 @@ struct ColorProfile {
 impl ColorProfile {
     pub fn basic() -> Self {
         ColorProfile {
-            error: Style::new().fg(Color::Red),
-            ok: Style::new().fg(Color::Green),
+            error: AnsiColor::Red.on_default(),
+            ok: AnsiColor::Green.on_default(),
         }
     }
 }
@@ -100,15 +100,7 @@ impl Schema {
             || self.total == self.object
             || self.total == self.array;
 
-        print!(
-            "{}",
-            (if good {
-                color.ok.prefix()
-            } else {
-                color.error.prefix()
-            })
-            .to_string()
-        );
+        print!("{}", (if good { color.ok } else { color.error }).render());
         print!("{0:>1$}|{2:->20}: ", "", indent * 4, name,);
         print!(
             "(n:{:<3} b:{:<3} s:{:<3} i:{:<3} f:{:<3} o:{:<3} a:{:<3}) / {:<3}",
@@ -121,7 +113,7 @@ impl Schema {
             self.array,
             self.total,
         );
-        println!("{}", color.ok.suffix().to_string());
+        println!("{}", color.ok.render_reset());
         for (k, v) in self.children.iter() {
             v.print(k.as_str(), indent + 1, color)
         }

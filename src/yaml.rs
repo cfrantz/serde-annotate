@@ -1,4 +1,4 @@
-use crate::color::ColorProfile;
+use crate::color::{ColorProfile, PaintExt};
 use crate::document::{CommentFormat, Document, StrFormat};
 use crate::error::Error;
 use crate::integer::Int;

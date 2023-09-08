@@ -42,7 +42,7 @@ rust_library(
     ],
     version = "0.1.0",
     deps = [
-        "@crate_index//:ansi_term",
+        "@crate_index//:anstyle",
         "@crate_index//:num-traits",
         "@crate_index//:once_cell",
         "@crate_index//:pest",

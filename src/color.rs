@@ -1,4 +1,6 @@
-use ansi_term::{Color, Style};
+use std::fmt::Display;
+
+use anstyle::{AnsiColor, Style};
 
 /// A `ColorProfile` describes how to apply color information when rendering a document.
 #[derive(Default, Clone, Copy)]
@@ -29,16 +31,43 @@ impl ColorProfile {
     /// Returns a basic color profile.
     pub fn basic() -> Self {
         ColorProfile {
-            aggregate: Style::new().fg(Color::Red),
+            aggregate: AnsiColor::Red.on_default(),
             punctuation: Style::new(),
-            comment: Style::new().fg(Color::White).italic(),
-            null: Style::new().fg(Color::Red).bold(),
-            key: Style::new().fg(Color::Cyan),
-            string: Style::new().fg(Color::Green),
-            escape: Style::new().fg(Color::Green).bold(),
-            boolean: Style::new().fg(Color::Blue),
-            integer: Style::new().fg(Color::Blue).bold(),
-            float: Style::new().fg(Color::Purple),
+            comment: AnsiColor::White.on_default().italic(),
+            null: AnsiColor::Red.on_default().bold(),
+            key: AnsiColor::Cyan.on_default(),
+            string: AnsiColor::Green.on_default(),
+            escape: AnsiColor::Green.on_default().bold(),
+            boolean: AnsiColor::Blue.on_default(),
+            integer: AnsiColor::Blue.on_default().bold(),
+            float: AnsiColor::Magenta.on_default(),
         }
+    }
+}
+
+pub(crate) struct Paint<T> {
+    style: Style,
+    text: T,
+}
+
+impl<T: Display> std::fmt::Display for Paint<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}{}{}",
+            self.style.render(),
+            self.text,
+            self.style.render_reset()
+        )
+    }
+}
+
+pub(crate) trait PaintExt {
+    fn paint<T>(self, text: T) -> Paint<T>;
+}
+
+impl PaintExt for Style {
+    fn paint<T>(self, text: T) -> Paint<T> {
+        Paint { style: self, text }
     }
 }
