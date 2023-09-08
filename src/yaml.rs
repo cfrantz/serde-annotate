@@ -2,7 +2,7 @@ use crate::color::{ColorProfile, PaintExt};
 use crate::document::{CommentFormat, Document, StrFormat};
 use crate::error::Error;
 use crate::integer::Int;
-use std::fmt;
+use std::fmt::{self, Display};
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -416,17 +416,11 @@ impl YamlEmitter {
         Ok(())
     }
 
-    fn writeln<W: fmt::Write>(&mut self, w: &mut W, s: &str) -> Result<()> {
+    fn writeln<W: fmt::Write>(&mut self, w: &mut W, s: impl Display) -> Result<()> {
         if self.compact {
-            match s {
-                "," => write!(w, "{}", self.color.punctuation.paint(", "))?,
-                _ => write!(w, "{}", s)?,
-            };
+            write!(w, "{}", s)?;
         } else {
-            match s {
-                "," => writeln!(w, "{}", self.color.punctuation.paint(","))?,
-                _ => writeln!(w, "{}", s)?,
-            };
+            writeln!(w, "{}", s)?;
         }
         Ok(())
     }

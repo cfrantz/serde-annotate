@@ -4,7 +4,7 @@ use crate::error::Error;
 use crate::integer::{Base, Int};
 use once_cell::sync::OnceCell;
 use std::collections::HashSet;
-use std::fmt;
+use std::fmt::{self, Display};
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -238,7 +238,11 @@ impl JsonEmitter {
         self.emit_indent(w)?;
         for (i, value) in bytes.iter().enumerate() {
             if i > 0 {
-                self.writeln(w, ",")?;
+                if self.compact {
+                    write!(w, "{}", self.color.punctuation.paint(", "))?;
+                } else {
+                    writeln!(w, "{}", self.color.punctuation.paint(","))?;
+                }
                 self.emit_indent(w)?;
             }
             write!(w, "{}", value)?;
@@ -618,17 +622,11 @@ impl JsonEmitter {
         Ok(())
     }
 
-    fn writeln<W: fmt::Write>(&mut self, w: &mut W, s: &str) -> Result<()> {
+    fn writeln<W: fmt::Write>(&mut self, w: &mut W, s: impl Display) -> Result<()> {
         if self.compact {
-            match s {
-                "," => write!(w, "{} ", self.color.punctuation.paint(","))?,
-                _ => write!(w, "{}", s)?,
-            };
+            write!(w, "{}", s)?;
         } else {
-            match s {
-                "," => writeln!(w, "{}", self.color.punctuation.paint(","))?,
-                _ => writeln!(w, "{}", s)?,
-            };
+            writeln!(w, "{}", s)?;
         }
         Ok(())
     }
