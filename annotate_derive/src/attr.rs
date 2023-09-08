@@ -38,7 +38,7 @@ pub fn get(input: &[Attribute]) -> Result<Attrs> {
     };
 
     for attr in input {
-        if attr.path.is_ident("annotate") {
+        if attr.path().is_ident("annotate") {
             attrs.annotate = Some(attr);
             parse_annotate_attribute(&mut attrs, attr)?;
         }

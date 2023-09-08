@@ -1,5 +1,5 @@
 {
-  "checksum": "5cd297aee7b1618bc3ab52a21b5c9b7b82726e12ac44889b16336186f873aee3",
+  "checksum": "86f3866f98596097eea2cee8034bb8ed8fc3f8c3e3835efd418b39d80c52f8c2",
   "crates": {
     "aho-corasick 1.0.5": {
       "name": "aho-corasick",
@@ -79,7 +79,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.109",
+              "id": "syn 2.0.31",
               "target": "syn"
             }
           ],
@@ -2471,84 +2471,6 @@
       },
       "license": "MIT"
     },
-    "syn 1.0.109": {
-      "name": "syn",
-      "version": "1.0.109",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/syn/1.0.109/download",
-          "sha256": "72b64191b275b66ffe2469e8af2c1cfe3bafa67b529ead792a6d0160888b4237"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "syn",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "syn",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "clone-impls",
-            "default",
-            "derive",
-            "extra-traits",
-            "parsing",
-            "printing",
-            "proc-macro",
-            "quote"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "proc-macro2 1.0.66",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.33",
-              "target": "quote"
-            },
-            {
-              "id": "syn 1.0.109",
-              "target": "build_script_build"
-            },
-            {
-              "id": "unicode-ident 1.0.11",
-              "target": "unicode_ident"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "1.0.109"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ]
-      },
-      "license": "MIT OR Apache-2.0"
-    },
     "syn 2.0.31": {
       "name": "syn",
       "version": "2.0.31",
@@ -2579,6 +2501,7 @@
             "clone-impls",
             "default",
             "derive",
+            "extra-traits",
             "full",
             "parsing",
             "printing",
