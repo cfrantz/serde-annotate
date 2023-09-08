@@ -234,7 +234,7 @@ impl JsonEmitter {
 
     fn emit_bytes<W: fmt::Write>(&mut self, w: &mut W, bytes: &[u8]) -> Result<()> {
         self.level += 1;
-        self.writeln(w, &self.color.aggregate.paint("[").to_string())?;
+        self.writeln(w, self.color.aggregate.paint("["))?;
         self.emit_indent(w)?;
         for (i, value) in bytes.iter().enumerate() {
             if i > 0 {
@@ -250,14 +250,14 @@ impl JsonEmitter {
         self.writeln(w, "")?;
         self.level -= 1;
         self.emit_indent(w)?;
-        write!(w, "{}", &self.color.aggregate.paint("]"))?;
+        write!(w, "{}", self.color.aggregate.paint("]"))?;
         Ok(())
     }
 
     // TODO: Can this function be rewritten to be less complex?
     fn emit_sequence<W: fmt::Write>(&mut self, w: &mut W, sequence: &[Document]) -> Result<()> {
         self.level += 1;
-        self.writeln(w, &self.color.aggregate.paint("[").to_string())?;
+        self.writeln(w, self.color.aggregate.paint("["))?;
         if !sequence.is_empty() {
             self.emit_indent(w)?;
         }
@@ -289,7 +289,7 @@ impl JsonEmitter {
                     if !val_done {
                         self.emit_node(w, node)?;
                         if i != last {
-                            write!(w, "{}", &self.color.punctuation.paint(","))?;
+                            write!(w, "{}", self.color.punctuation.paint(","))?;
                         }
                         val_done = true;
                         need_eol = true;
@@ -300,7 +300,7 @@ impl JsonEmitter {
             } else {
                 self.emit_node(w, value)?;
                 if i != last {
-                    write!(w, "{}", &self.color.punctuation.paint(","))?;
+                    write!(w, "{}", self.color.punctuation.paint(","))?;
                 }
                 need_eol = true;
             }
@@ -310,7 +310,7 @@ impl JsonEmitter {
         }
         self.level -= 1;
         self.emit_indent(w)?;
-        write!(w, "{}", &self.color.aggregate.paint("]"))?;
+        write!(w, "{}", self.color.aggregate.paint("]"))?;
         Ok(())
     }
 
@@ -332,7 +332,7 @@ impl JsonEmitter {
     // TODO: Can this function be rewritten to be less complex?
     fn emit_mapping<W: fmt::Write>(&mut self, w: &mut W, mapping: &[Document]) -> Result<()> {
         self.level += 1;
-        self.writeln(w, &self.color.aggregate.paint("{").to_string())?;
+        self.writeln(w, self.color.aggregate.paint("{"))?;
         if !mapping.is_empty() {
             self.emit_indent(w)?;
         }
@@ -370,21 +370,21 @@ impl JsonEmitter {
                             w,
                             "{}{}{}",
                             self.color.punctuation.paint("\""),
-                            self.color.key.paint(format!("{}", v)),
+                            self.color.key.paint(v),
                             self.color.punctuation.paint("\"")
                         )?,
                         Document::Int(v) => write!(
                             w,
                             "{}{}{}",
                             self.color.punctuation.paint("\""),
-                            self.color.key.paint(format!("{}", v)),
+                            self.color.key.paint(v),
                             self.color.punctuation.paint("\"")
                         )?,
                         Document::Float(v) => write!(
                             w,
                             "{}{}{}",
                             self.color.punctuation.paint("\""),
-                            self.color.key.paint(format!("{}", v)),
+                            self.color.key.paint(v),
                             self.color.punctuation.paint("\"")
                         )?,
                         Document::Comment(_, _) => return Err(Error::KeyTypeError("comment")),
@@ -395,12 +395,12 @@ impl JsonEmitter {
                         Document::Fragment(_) => return Err(Error::KeyTypeError("fragment")),
                         Document::Null => return Err(Error::KeyTypeError("null")),
                     };
-                    write!(w, "{}", &self.color.punctuation.paint(": "))?;
+                    write!(w, "{}", self.color.punctuation.paint(": "))?;
                     key_done = true;
                 } else if !val_done {
                     self.emit_node(w, node)?;
                     if i != last {
-                        write!(w, "{}", &self.color.punctuation.paint(","))?;
+                        write!(w, "{}", self.color.punctuation.paint(","))?;
                     }
                     val_done = true;
                     need_eol = true;
@@ -412,7 +412,7 @@ impl JsonEmitter {
         }
         self.level -= 1;
         self.emit_indent(w)?;
-        write!(w, "{}", &self.color.aggregate.paint("}"))?;
+        write!(w, "{}", self.color.aggregate.paint("}"))?;
         Ok(())
     }
 
@@ -459,7 +459,9 @@ impl JsonEmitter {
                 write!(
                     w,
                     "{}",
-                    self.color.comment.paint(format!("{} {}", leader, line))
+                    self.color
+                        .comment
+                        .paint(format_args!("{} {}", leader, line))
                 )?;
             }
         }
@@ -479,7 +481,7 @@ impl JsonEmitter {
     }
 
     fn emit_string_strict<W: fmt::Write>(&mut self, w: &mut W, value: &str) -> Result<()> {
-        write!(w, "{}", &self.color.punctuation.paint("\""))?;
+        write!(w, "{}", self.color.punctuation.paint("\""))?;
         let bytes = value.as_bytes();
         let mut start = 0;
         for (i, &byte) in bytes.iter().enumerate() {
@@ -488,26 +490,28 @@ impl JsonEmitter {
                 continue;
             }
             if start < i {
-                write!(w, "{}", &self.color.string.paint(&value[start..i]))?;
+                write!(w, "{}", self.color.string.paint(&value[start..i]))?;
             }
             match escape {
                 UU => write!(
                     w,
                     "{}",
-                    &self.color.escape.paint(format!("\\u{:04x}", byte))
+                    self.color.escape.paint(format_args!("\\u{:04x}", byte))
                 )?,
                 _ => write!(
                     w,
                     "{}",
-                    &self.color.escape.paint(format!("\\{}", escape as char))
+                    self.color
+                        .escape
+                        .paint(format_args!("\\{}", escape as char))
                 )?,
             };
             start = i + 1;
         }
         if start != bytes.len() {
-            write!(w, "{}", &self.color.string.paint(&value[start..]))?;
+            write!(w, "{}", self.color.string.paint(&value[start..]))?;
         }
-        write!(w, "{}", &self.color.punctuation.paint("\""))?;
+        write!(w, "{}", self.color.punctuation.paint("\""))?;
         Ok(())
     }
 
@@ -516,10 +520,10 @@ impl JsonEmitter {
             writeln!(w)?;
             self.level += 1;
             self.emit_indent(w)?;
-            self.writeln(w, &self.color.punctuation.paint("'''").to_string())?;
+            self.writeln(w, self.color.punctuation.paint("'''"))?;
             self.emit_indent(w)?;
         } else {
-            write!(w, "{}", &self.color.punctuation.paint("\""))?;
+            write!(w, "{}", self.color.punctuation.paint("\""))?;
         }
         let bytes = value.as_bytes();
         let mut start = 0;
@@ -529,19 +533,21 @@ impl JsonEmitter {
                 continue;
             }
             if start < i {
-                write!(w, "{}", &self.color.string.paint(&value[start..i]))?;
+                write!(w, "{}", self.color.string.paint(&value[start..i]))?;
             }
             match escape {
                 UU => write!(
                     w,
                     "{}",
-                    &self.color.escape.paint(format!("\\u{:04x}", byte))
+                    self.color.escape.paint(format_args!("\\u{:04x}", byte))
                 )?,
                 NN => match self.multiline {
                     Multiline::None => write!(
                         w,
                         "{}",
-                        &self.color.escape.paint(format!("\\{}", escape as char))
+                        self.color
+                            .escape
+                            .paint(format_args!("\\{}", escape as char))
                     )?,
                     Multiline::Json5 => writeln!(w, "{}", self.color.escape.paint("\\"))?,
                     Multiline::Hjson => {
@@ -552,30 +558,32 @@ impl JsonEmitter {
                 _ => write!(
                     w,
                     "{}",
-                    &self.color.escape.paint(format!("\\{}", escape as char))
+                    self.color
+                        .escape
+                        .paint(format_args!("\\{}", escape as char))
                 )?,
             };
             start = i + 1;
         }
         if start != bytes.len() {
-            write!(w, "{}", &self.color.string.paint(&value[start..]))?;
+            write!(w, "{}", self.color.string.paint(&value[start..]))?;
         }
         if self.multiline == Multiline::Hjson {
             writeln!(w)?;
             self.emit_indent(w)?;
-            write!(w, "{}", &self.color.punctuation.paint("'''"))?;
+            write!(w, "{}", self.color.punctuation.paint("'''"))?;
             self.level -= 1;
         } else {
-            write!(w, "{}", &self.color.punctuation.paint("\""))?;
+            write!(w, "{}", self.color.punctuation.paint("\""))?;
         }
         Ok(())
     }
 
     fn emit_boolean<W: fmt::Write>(&mut self, w: &mut W, b: bool) -> Result<()> {
         if b {
-            write!(w, "{}", &self.color.boolean.paint("true"))?;
+            write!(w, "{}", self.color.boolean.paint("true"))?;
         } else {
-            write!(w, "{}", &self.color.boolean.paint("false"))?;
+            write!(w, "{}", self.color.boolean.paint("false"))?;
         }
         Ok(())
     }
@@ -594,18 +602,18 @@ impl JsonEmitter {
                 self.color.punctuation.paint("\"")
             )?;
         } else {
-            write!(w, "{}", &self.color.integer.paint(s))?;
+            write!(w, "{}", self.color.integer.paint(s))?;
         }
         Ok(())
     }
 
     fn emit_float<W: fmt::Write>(&mut self, w: &mut W, f: f64) -> Result<()> {
-        write!(w, "{}", &self.color.float.paint(format!("{}", f)))?;
+        write!(w, "{}", self.color.float.paint(f))?;
         Ok(())
     }
 
     fn emit_null<W: fmt::Write>(&mut self, w: &mut W) -> Result<()> {
-        write!(w, "{}", &self.color.null.paint("null"))?;
+        write!(w, "{}", self.color.null.paint("null"))?;
         Ok(())
     }
 

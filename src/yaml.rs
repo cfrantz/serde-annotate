@@ -120,7 +120,7 @@ impl YamlEmitter {
     }
 
     fn emit_bytes<W: fmt::Write>(&mut self, w: &mut W, bytes: &[u8]) -> Result<()> {
-        self.writeln(w, &self.color.aggregate.paint("[").to_string())?;
+        self.writeln(w, self.color.aggregate.paint("["))?;
         self.emit_indent(w)?;
         for (i, chunk) in bytes.chunks(16).enumerate() {
             if i > 0 {
@@ -132,7 +132,7 @@ impl YamlEmitter {
                 &self.color.integer
             };
             for b in chunk {
-                write!(w, "{}", color.paint(format!("0x{:02X},", b)))?;
+                write!(w, "{}", color.paint(format_args!("0x{:02X},", b)))?;
             }
         }
         self.writeln(w, "")?;
@@ -144,7 +144,7 @@ impl YamlEmitter {
     fn emit_helper<W: fmt::Write>(
         &mut self,
         w: &mut W,
-        prefix: &str,
+        prefix: impl Display,
         value: &Document,
     ) -> Result<()> {
         match value {
@@ -206,12 +206,12 @@ impl YamlEmitter {
                             }
                             continue;
                         }
-                        self.emit_helper(w, &self.color.punctuation.paint("-").to_string(), node)?;
+                        self.emit_helper(w, self.color.punctuation.paint("-"), node)?;
                         self.emit_node(w, node)?;
                         val_done = true;
                     }
                 } else {
-                    self.emit_helper(w, &self.color.punctuation.paint("-").to_string(), value)?;
+                    self.emit_helper(w, self.color.punctuation.paint("-"), value)?;
                     self.emit_node(w, value)?;
                 }
             }
@@ -265,11 +265,7 @@ impl YamlEmitter {
                     self.emit_node(w, node)?;
                     self.is_key = k;
                     key_done = true;
-                    self.emit_helper(
-                        w,
-                        &self.color.punctuation.paint(":").to_string(),
-                        next.unwrap(),
-                    )?;
+                    self.emit_helper(w, self.color.punctuation.paint(":"), next.unwrap())?;
                 } else if !val_done {
                     self.emit_node(w, node)?;
                     val_done = true;
@@ -311,12 +307,12 @@ impl YamlEmitter {
                     self.emit_indent(w)?;
                 }
                 if line.is_empty() {
-                    write!(w, "{}", &self.color.comment.paint("#").to_string())?;
+                    write!(w, "{}", self.color.comment.paint("#"))?;
                 } else {
                     write!(
                         w,
                         "{}",
-                        &self.color.comment.paint(format!("# {}", line)).to_string()
+                        self.color.comment.paint(format_args!("# {}", line))
                     )?;
                 }
             }
@@ -356,9 +352,9 @@ impl YamlEmitter {
 
     fn emit_boolean<W: fmt::Write>(&mut self, w: &mut W, b: bool) -> Result<()> {
         let color = if self.is_key {
-            &self.color.key
+            self.color.key
         } else {
-            &self.color.boolean
+            self.color.boolean
         };
         if b {
             write!(w, "{}", color.paint("true"))?;
@@ -370,29 +366,29 @@ impl YamlEmitter {
 
     fn emit_int<W: fmt::Write>(&mut self, w: &mut W, i: &Int) -> Result<()> {
         let color = if self.is_key {
-            &self.color.key
+            self.color.key
         } else {
-            &self.color.integer
+            self.color.integer
         };
-        write!(w, "{}", color.paint(i.to_string()))?;
+        write!(w, "{}", color.paint(i))?;
         Ok(())
     }
 
     fn emit_float<W: fmt::Write>(&mut self, w: &mut W, f: f64) -> Result<()> {
         let color = if self.is_key {
-            &self.color.key
+            self.color.key
         } else {
-            &self.color.float
+            self.color.float
         };
-        write!(w, "{}", color.paint(f.to_string()))?;
+        write!(w, "{}", color.paint(f))?;
         Ok(())
     }
 
     fn emit_null<W: fmt::Write>(&mut self, w: &mut W) -> Result<()> {
         let color = if self.is_key {
-            &self.color.key
+            self.color.key
         } else {
-            &self.color.null
+            self.color.null
         };
         write!(w, "{}", color.paint("null"))?;
         Ok(())
@@ -433,12 +429,12 @@ impl YamlEmitter {
         quoted: bool,
     ) -> std::result::Result<(), fmt::Error> {
         let color = if self.is_key {
-            &self.color.key
+            self.color.key
         } else {
-            &self.color.string
+            self.color.string
         };
         if quoted {
-            wr.write_str(&self.color.punctuation.paint("\"").to_string())?;
+            write!(wr, "{}", self.color.punctuation.paint("\""))?;
         }
 
         let mut start = 0;
@@ -482,18 +478,18 @@ impl YamlEmitter {
                 _ => continue,
             };
             if start < i {
-                wr.write_str(&color.paint(&v[start..i]).to_string())?;
+                write!(wr, "{}", color.paint(&v[start..i]))?;
             }
-            wr.write_str(&self.color.escape.paint(escaped).to_string())?;
+            write!(wr, "{}", self.color.escape.paint(escaped))?;
             start = i + 1;
         }
 
         if start != v.len() {
-            wr.write_str(&color.paint(&v[start..]).to_string())?;
+            write!(wr, "{}", color.paint(&v[start..]))?;
         }
 
         if quoted {
-            wr.write_str(&self.color.punctuation.paint("\"").to_string())?;
+            write!(wr, "{}", self.color.punctuation.paint("\""))?;
         }
         Ok(())
     }
