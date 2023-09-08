@@ -5,7 +5,7 @@ def rust_deps():
     rust_register_toolchains(
         edition = "2021",
         versions = [
-            "1.67.0",
-            "nightly/2022-09-28",
+            "1.71.1",
+            "nightly/2023-07-30",
         ],
     )
