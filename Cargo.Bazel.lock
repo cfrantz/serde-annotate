@@ -1,5 +1,5 @@
 {
-  "checksum": "183e202058f8247a6f3c694d8401483596d83f2a3accf82e68c80165f94b1c56",
+  "checksum": "3cb3e6e5689bc12c789664005b0b8e96f13e4a6ef9f2c8aa80495c6e3021dd2c",
   "crates": {
     "aho-corasick 1.0.5": {
       "name": "aho-corasick",
@@ -70,10 +70,6 @@
         ],
         "deps": {
           "common": [
-            {
-              "id": "proc-macro-error 1.0.4",
-              "target": "proc_macro_error"
-            },
             {
               "id": "proc-macro2 1.0.66",
               "target": "proc_macro2"
@@ -1699,167 +1695,6 @@
         },
         "edition": "2021",
         "version": "2.7.3"
-      },
-      "license": "MIT OR Apache-2.0"
-    },
-    "proc-macro-error 1.0.4": {
-      "name": "proc-macro-error",
-      "version": "1.0.4",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/proc-macro-error/1.0.4/download",
-          "sha256": "da25490ff9892aab3fcf7c36f08cfb902dd3e71ca0f9f9517bea02a73a5ce38c"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "proc_macro_error",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "proc_macro_error",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "syn",
-            "syn-error"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "proc-macro-error 1.0.4",
-              "target": "build_script_build"
-            },
-            {
-              "id": "proc-macro2 1.0.66",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.33",
-              "target": "quote"
-            },
-            {
-              "id": "syn 1.0.109",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "proc-macro-error-attr 1.0.4",
-              "target": "proc_macro_error_attr"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "1.0.4"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "version_check 0.9.4",
-              "target": "version_check"
-            }
-          ],
-          "selects": {}
-        }
-      },
-      "license": "MIT OR Apache-2.0"
-    },
-    "proc-macro-error-attr 1.0.4": {
-      "name": "proc-macro-error-attr",
-      "version": "1.0.4",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/proc-macro-error-attr/1.0.4/download",
-          "sha256": "a1be40180e52ecc98ad80b184934baf3d0d29f979574e439af5a55274b35f869"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "proc_macro_error_attr",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "proc_macro_error_attr",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "proc-macro-error-attr 1.0.4",
-              "target": "build_script_build"
-            },
-            {
-              "id": "proc-macro2 1.0.66",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.33",
-              "target": "quote"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "1.0.4"
-      },
-      "build_script_attrs": {
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "version_check 0.9.4",
-              "target": "version_check"
-            }
-          ],
-          "selects": {}
-        }
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -3834,37 +3669,10 @@
     "serde_annotate 0.1.0": ""
   },
   "conditions": {
-    "aarch64-apple-darwin": [
-      "aarch64-apple-darwin"
-    ],
-    "aarch64-apple-ios": [
-      "aarch64-apple-ios"
-    ],
-    "aarch64-apple-ios-sim": [
-      "aarch64-apple-ios-sim"
-    ],
-    "aarch64-fuchsia": [
-      "aarch64-fuchsia"
-    ],
     "aarch64-linux-android": [
       "aarch64-linux-android"
     ],
     "aarch64-pc-windows-gnullvm": [],
-    "aarch64-pc-windows-msvc": [
-      "aarch64-pc-windows-msvc"
-    ],
-    "aarch64-unknown-linux-gnu": [
-      "aarch64-unknown-linux-gnu"
-    ],
-    "arm-unknown-linux-gnueabi": [
-      "arm-unknown-linux-gnueabi"
-    ],
-    "armv7-linux-androideabi": [
-      "armv7-linux-androideabi"
-    ],
-    "armv7-unknown-linux-gnueabi": [
-      "armv7-unknown-linux-gnueabi"
-    ],
     "cfg(all(target_arch = \"aarch64\", target_env = \"msvc\", not(windows_raw_dylib)))": [
       "aarch64-pc-windows-msvc"
     ],
@@ -3920,71 +3728,8 @@
       "i686-pc-windows-msvc",
       "x86_64-pc-windows-msvc"
     ],
-    "i686-apple-darwin": [
-      "i686-apple-darwin"
-    ],
-    "i686-linux-android": [
-      "i686-linux-android"
-    ],
     "i686-pc-windows-gnu": [],
-    "i686-pc-windows-msvc": [
-      "i686-pc-windows-msvc"
-    ],
-    "i686-unknown-freebsd": [
-      "i686-unknown-freebsd"
-    ],
-    "i686-unknown-linux-gnu": [
-      "i686-unknown-linux-gnu"
-    ],
-    "powerpc-unknown-linux-gnu": [
-      "powerpc-unknown-linux-gnu"
-    ],
-    "riscv32imc-unknown-none-elf": [
-      "riscv32imc-unknown-none-elf"
-    ],
-    "riscv64gc-unknown-none-elf": [
-      "riscv64gc-unknown-none-elf"
-    ],
-    "s390x-unknown-linux-gnu": [
-      "s390x-unknown-linux-gnu"
-    ],
-    "thumbv7em-none-eabi": [
-      "thumbv7em-none-eabi"
-    ],
-    "thumbv8m.main-none-eabi": [
-      "thumbv8m.main-none-eabi"
-    ],
-    "wasm32-unknown-unknown": [
-      "wasm32-unknown-unknown"
-    ],
-    "wasm32-wasi": [
-      "wasm32-wasi"
-    ],
-    "x86_64-apple-darwin": [
-      "x86_64-apple-darwin"
-    ],
-    "x86_64-apple-ios": [
-      "x86_64-apple-ios"
-    ],
-    "x86_64-fuchsia": [
-      "x86_64-fuchsia"
-    ],
-    "x86_64-linux-android": [
-      "x86_64-linux-android"
-    ],
     "x86_64-pc-windows-gnu": [],
-    "x86_64-pc-windows-gnullvm": [],
-    "x86_64-pc-windows-msvc": [
-      "x86_64-pc-windows-msvc"
-    ],
-    "x86_64-unknown-freebsd": [
-      "x86_64-unknown-freebsd"
-    ],
-    "x86_64-unknown-linux-gnu": [
-      "x86_64-unknown-linux-gnu"
-    ],
-    "x86_64-unknown-none": [
-      "x86_64-unknown-none"
-    ]
+    "x86_64-pc-windows-gnullvm": []
   }
 }
