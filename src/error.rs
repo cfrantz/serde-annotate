@@ -17,13 +17,13 @@ pub enum Error {
     #[error("unhandled escape: `\\{0}`")]
     EscapeError(char),
     #[error("formatter error: {0:?}")]
-    FmtError(std::fmt::Error),
+    FmtError(#[from] std::fmt::Error),
     #[error("Hexdump error: {0}")]
     HexdumpError(String),
     #[error("Type {0:?} is not valid as a mapping key")]
     KeyTypeError(&'static str),
     #[error(transparent)]
-    ParseError(#[from] ParseError),
+    ParseError(Box<ParseError>),
     #[error(transparent)]
     ParseBoolError(#[from] ParseBoolError),
     #[error(transparent)]
@@ -48,8 +48,8 @@ impl de::Error for Error {
     }
 }
 
-impl From<std::fmt::Error> for Error {
-    fn from(e: std::fmt::Error) -> Self {
-        Error::FmtError(e)
+impl From<ParseError> for Error {
+    fn from(e: ParseError) -> Self {
+        Error::ParseError(Box::new(e))
     }
 }
