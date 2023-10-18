@@ -75,7 +75,7 @@ impl Schema {
 
     fn detect(&mut self, root: &Document) {
         for (path, doc) in root.iter_path() {
-            let mut node = self.get_mut(&path);
+            let node = self.get_mut(&path);
             node.total += 1;
             match doc {
                 Document::Null => node.null += 1,
