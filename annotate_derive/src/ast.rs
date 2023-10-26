@@ -59,9 +59,9 @@ impl<'a> Struct<'a> {
         let fields = Field::multiple_from_syn(&data.fields, span)?;
         Ok(Struct {
             original: node,
-            attrs: attrs,
+            attrs,
             ident: node.ident.clone(),
-            fields: fields,
+            fields,
         })
     }
 }
@@ -80,9 +80,9 @@ impl<'a> Enum<'a> {
             .collect::<Result<_>>()?;
         Ok(Enum {
             original: node,
-            attrs: attrs,
+            attrs,
             ident: node.ident.clone(),
-            variants: variants,
+            variants,
         })
     }
 }
@@ -116,7 +116,7 @@ impl<'a> Variant<'a> {
         let attrs = attr::get(&node.attrs)?;
         Ok(Variant {
             original: node,
-            attrs: attrs,
+            attrs,
             ident: node.ident.clone(),
             fields: Field::multiple_from_syn(&node.fields, span)?,
         })

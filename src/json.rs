@@ -677,14 +677,7 @@ const SPACE: &str = "                                                           
 
 // More strict than javascript.
 fn bad_identifier_char(ch: char) -> bool {
-    match ch {
-        '0'..='9' => false,
-        'A'..='Z' => false,
-        'a'..='z' => false,
-        '_' => false,
-        '$' => false,
-        _ => true,
-    }
+    !matches!(ch, '0'..='9' | 'A'..='Z' | 'a'..='z' | '_' | '$')
 }
 
 fn is_reserved_word(word: &str) -> bool {
@@ -743,11 +736,11 @@ fn is_reserved_word(word: &str) -> bool {
 }
 
 fn is_legal_bareword(word: &str) -> bool {
-    if word.len() == 0 {
+    if word.is_empty() {
         return false;
     }
-    let ch = word.chars().nth(0).unwrap();
-    !((ch >= '0' && ch <= '9') || word.contains(bad_identifier_char) || is_reserved_word(word))
+    let ch = word.chars().next().unwrap();
+    !(ch.is_ascii_digit() || word.contains(bad_identifier_char) || is_reserved_word(word))
 }
 
 #[cfg(test)]

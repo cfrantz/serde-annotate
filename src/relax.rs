@@ -70,8 +70,7 @@ impl Default for Relax {
 impl Relax {
     /// Creates a strict json parser.
     pub fn json() -> Self {
-        Relax {
-            inner: Default::default(),
+        Self {
             comma_trailing: false,
             comma_optional: false,
             number_bin: false,
@@ -87,31 +86,34 @@ impl Relax {
             comment_slash: false,
             comment_hash: false,
             comment_block: false,
+            ..Self::default()
         }
     }
 
     /// Creates a json5 parser.
     pub fn json5() -> Self {
-        let mut r = Self::default();
-        r.comma_optional = false;
-        r.string_unquoted = false;
-        r.string_hjson_multiline = false;
-        r.comment_hash = false;
-        r.number_bin = false;
-        r.number_oct = false;
-        r
+        Self {
+            comma_optional: false,
+            string_unquoted: false,
+            string_hjson_multiline: false,
+            comment_hash: false,
+            number_bin: false,
+            number_oct: false,
+            ..Self::default()
+        }
     }
 
     /// Creates a hjson parser.
     pub fn hjson() -> Self {
-        let mut r = Self::default();
-        r.string_json5_multiline = false;
-        r.number_bin = false;
-        r.number_hex = false;
-        r.number_oct = false;
-        r.number_plus = false;
-        r.number_lax_dec_point = false;
-        r
+        Self {
+            string_json5_multiline: false,
+            number_bin: false,
+            number_hex: false,
+            number_oct: false,
+            number_plus: false,
+            number_lax_dec_point: false,
+            ..Self::default()
+        }
     }
 
     /// Parses a string into a `Document`.
@@ -217,7 +219,7 @@ impl Relax {
                 "hexadecimal literal",
                 pair.as_span().start_pos(),
             )?;
-            return Self::from_str_radix(text, 16);
+            Self::from_str_radix(text, 16)
         } else if t.starts_with("0b") || t.starts_with("0B") {
             // Binary integer.
             Self::syntax_error(
@@ -389,10 +391,10 @@ impl Relax {
                 pair.as_span().start_pos(),
             )?;
             let c = c.strip_suffix("*/").unwrap().trim_end();
-            let lines = c.split("\n").map(str::trim).collect::<Vec<_>>();
+            let lines = c.split('\n').map(str::trim).collect::<Vec<_>>();
             let lines = Self::strip_leading_prefix(&lines, '*');
             let lines = Self::strip_leading_prefix(&lines, ' ');
-            let start = if lines.get(0).map(|s| s.is_empty()) == Some(true) {
+            let start = if lines.first().map(|s| s.is_empty()) == Some(true) {
                 1
             } else {
                 0
@@ -405,7 +407,7 @@ impl Relax {
                 "slash comment",
                 pair.as_span().start_pos(),
             )?;
-            let lines = comment.split("\n").map(str::trim).collect::<Vec<_>>();
+            let lines = comment.split('\n').map(str::trim).collect::<Vec<_>>();
             let lines = Self::strip_leading_prefix(&lines, '/');
             let lines = Self::strip_leading_prefix(&lines, ' ');
             let end = lines.len()
@@ -416,13 +418,13 @@ impl Relax {
                 };
             let c = lines[..end].join("\n");
             Ok(Document::Comment(c, CommentFormat::SlashSlash))
-        } else if comment.starts_with("#") {
+        } else if comment.starts_with('#') {
             Self::syntax_error(
                 !self.comment_hash,
                 "hash comment",
                 pair.as_span().start_pos(),
             )?;
-            let lines = comment.split("\n").map(str::trim).collect::<Vec<_>>();
+            let lines = comment.split('\n').map(str::trim).collect::<Vec<_>>();
             let lines = Self::strip_leading_prefix(&lines, '#');
             let lines = Self::strip_leading_prefix(&lines, ' ');
             let end = lines.len()
@@ -463,7 +465,7 @@ impl Relax {
             Ok(Document::String(value.join("\n"), StrFormat::Multiline))
         } else if s.starts_with('\'') || s.starts_with('"') {
             Self::syntax_error(
-                !self.string_single_quote && s.starts_with("'"),
+                !self.string_single_quote && s.starts_with('\''),
                 "single quote",
                 pair.as_span().start_pos(),
             )?;
@@ -595,7 +597,7 @@ impl Relax {
                 }
             }
 
-            _ => Err(Error::Unknown(format!("{:?}", pair)).into()),
+            _ => Err(Error::Unknown(format!("{:?}", pair))),
         }
     }
 }
@@ -723,7 +725,7 @@ mod tests {
         }
     }
 
-    fn kv_extract<'a>(kv: Option<&'a Document>) -> Result<(&'a str, &'a str)> {
+    fn kv_extract(kv: Option<&Document>) -> Result<(&str, &str)> {
         if let Some((Document::String(k, _), Document::String(v, _))) =
             kv.map(Document::as_kv).transpose()?
         {

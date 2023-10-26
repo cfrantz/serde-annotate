@@ -189,12 +189,7 @@ impl YamlEmitter {
                 if let Document::Fragment(frags) = value {
                     let mut val_done = false;
                     let mut it = frags.iter().peekable();
-                    loop {
-                        let node = if let Some(n) = it.next() {
-                            n
-                        } else {
-                            break;
-                        };
+                    while let Some(node) = it.next() {
                         let next = it.peek();
                         if let Some((c, f)) = node.comment() {
                             if val_done {
@@ -239,12 +234,7 @@ impl YamlEmitter {
             let mut key_done = false;
             let mut val_done = false;
             let mut it = nodes.iter().peekable();
-            loop {
-                let node = if let Some(n) = it.next() {
-                    n
-                } else {
-                    break;
-                };
+            while let Some(node) = it.next() {
                 let next = it.peek();
                 if let Some((c, f)) = node.comment() {
                     if val_done {
@@ -515,13 +505,16 @@ fn need_quotes(string: &str) -> bool {
         string.starts_with(' ') || string.ends_with(' ')
     }
 
-    string == ""
+    string.is_empty()
         || need_quotes_spaces(string)
-        || string.starts_with(|character: char| match character {
-            '&' | '*' | '?' | '|' | '-' | '<' | '>' | '=' | '!' | '%' | '@' => true,
-            _ => false,
+        || string.starts_with(|character: char| {
+            matches!(
+                character,
+                '&' | '*' | '?' | '|' | '-' | '<' | '>' | '=' | '!' | '%' | '@'
+            )
         })
-        || string.contains(|character: char| match character {
+        || string.contains(|character: char| {
+            matches!(character,
             ':'
             | '{'
             | '}'
@@ -538,8 +531,7 @@ fn need_quotes(string: &str) -> bool {
             | '\n'
             | '\r'
             | '\x0e'..='\x1a'
-            | '\x1c'..='\x1f' => true,
-            _ => false,
+            | '\x1c'..='\x1f')
         })
         || [
             // http://yaml.org/type/bool.html

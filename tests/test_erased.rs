@@ -10,10 +10,9 @@ struct Hello {
 }
 
 fn hello() -> Box<dyn Annotate> {
-    let hello = Box::new(Hello {
+    Box::new(Hello {
         message: "Hello World!".into(),
-    });
-    hello
+    })
 }
 
 #[test]

@@ -60,7 +60,7 @@ impl<'a> AnnotatedSerializer<'a> {
     }
 
     fn annotate(&self, variant: Option<&str>, field: &MemberId) -> Option<Self> {
-        match self.annotator.map(|a| a.format(variant, field)).flatten() {
+        match self.annotator.and_then(|a| a.format(variant, field)) {
             Some(Format::Block) => Some(self.with_strformat(StrFormat::Multiline)),
             Some(Format::Binary) => Some(self.with_base(Base::Bin)),
             Some(Format::Decimal) => Some(self.with_base(Base::Dec)),
@@ -76,8 +76,7 @@ impl<'a> AnnotatedSerializer<'a> {
 
     fn comment(&self, variant: Option<&str>, field: &MemberId) -> Option<Document> {
         self.annotator
-            .map(|a| a.comment(variant, field))
-            .flatten()
+            .and_then(|a| a.comment(variant, field))
             .map(|c| Document::Comment(c, CommentFormat::Standard))
     }
 
@@ -152,7 +151,7 @@ impl<'s, 'a> ser::Serializer for &'s mut AnnotatedSerializer<'a> {
     }
 
     fn serialize_f64(self, v: f64) -> Result<Self::Ok, Self::Error> {
-        Ok(Document::Float(v as f64))
+        Ok(Document::Float(v))
     }
 
     fn serialize_char(self, v: char) -> Result<Self::Ok, Self::Error> {

@@ -184,16 +184,16 @@ impl Int {
         self.value.format(*base.unwrap_or(&Base::Dec), self.width)
     }
 
-    fn strip_numeric_prefix<'a>(src: &'a str, ch: u8) -> &'a str {
+    fn strip_numeric_prefix(src: &str, ch: u8) -> &str {
         let lo = ['0', (ch | 0x20) as char];
         let up = ['0', (ch & !0x20) as char];
-        if src.starts_with(&lo) || src.starts_with(&up) {
+        if src.starts_with(lo) || src.starts_with(up) {
             &src[2..]
         } else {
             src
         }
     }
-    fn detect_numeric_prefix<'a>(src: &'a str) -> (Base, &'a str) {
+    fn detect_numeric_prefix(src: &str) -> (Base, &str) {
         let bytes = src.as_bytes();
         if src.len() >= 2 && bytes[0] == b'0' {
             match bytes[1] {

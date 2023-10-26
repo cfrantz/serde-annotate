@@ -62,7 +62,7 @@ impl Schema {
     }
 
     fn check_str(&mut self, s: &str) {
-        if let Ok(_) = Int::from_str_radix(s, 0) {
+        if Int::from_str_radix(s, 0).is_ok() {
             self.integer += 1;
         } else {
             match s {
