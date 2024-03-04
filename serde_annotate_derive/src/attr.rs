@@ -1,3 +1,4 @@
+use proc_macro2::TokenTree;
 use syn::parse::ParseStream;
 use syn::{parenthesized, Attribute, Error, Ident, LitStr, Result, Token};
 
@@ -25,6 +26,7 @@ pub enum Comment {
 
 #[derive(Debug)]
 pub struct Attrs<'a> {
+    pub rename: Option<String>,
     pub annotate: Option<&'a Attribute>,
     pub format: Format,
     pub comment: Comment,
@@ -32,6 +34,7 @@ pub struct Attrs<'a> {
 
 pub fn get(input: &[Attribute]) -> Result<Attrs> {
     let mut attrs = Attrs {
+        rename: None,
         annotate: None,
         format: Format::None,
         comment: Comment::None,
@@ -41,6 +44,9 @@ pub fn get(input: &[Attribute]) -> Result<Attrs> {
         if attr.path().is_ident("annotate") {
             attrs.annotate = Some(attr);
             parse_annotate_attribute(&mut attrs, attr)?;
+        } else if attr.path().is_ident("serde") {
+            // If there is a `serde` attribute, look for `rename = "..."`.
+            parse_serde_attribute(&mut attrs, attr)?;
         }
     }
     Ok(attrs)
@@ -105,6 +111,31 @@ fn parse_annotate_attribute<'a>(attrs: &mut Attrs<'a>, attr: &'a Attribute) -> R
             if more {
                 let _comma: Token![,] = input.parse()?;
                 more = !input.is_empty();
+            }
+        }
+        Ok(())
+    })
+}
+
+fn parse_serde_attribute<'a>(attrs: &mut Attrs<'a>, attr: &'a Attribute) -> Result<()> {
+    attr.parse_args_with(|input: ParseStream| {
+        while !input.cursor().eof() {
+            let found = input.step(|cursor| {
+                let mut rest = *cursor;
+                while let Some((tt, next)) = rest.token_tree() {
+                    match &tt {
+                        TokenTree::Ident(r) if r == "rename" => {
+                            return Ok(((true), next));
+                        }
+                        _ => return Ok(((false), next)),
+                    }
+                }
+                Err(cursor.error("no `rename` found"))
+            })?;
+            if found {
+                let _eq: Token![=] = input.parse()?;
+                let name: LitStr = input.parse()?;
+                attrs.rename = Some(name.value());
             }
         }
         Ok(())

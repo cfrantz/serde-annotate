@@ -1,5 +1,6 @@
 use serde::ser;
 
+use crate::annotate::private::{Annotator, AnyPointer};
 use crate::annotate::{Annotate, Format, MemberId};
 use crate::document::{BytesFormat, CommentFormat, Document, StrFormat};
 use crate::error::Error;
@@ -10,13 +11,14 @@ pub fn serialize<T>(value: &T) -> Result<Document, Error>
 where
     T: ?Sized + ser::Serialize,
 {
-    let mut ser = AnnotatedSerializer::new(value.as_annotate());
+    let mut ser = AnnotatedSerializer::new(value);
     value.serialize(&mut ser)
 }
 
 /// Serializer adapter that adds user-annotatons to the serialized document.
 #[derive(Clone)]
 pub struct AnnotatedSerializer<'a> {
+    ptr: AnyPointer<'a>,
     annotator: Option<&'a dyn Annotate>,
     base: Base,
     strformat: StrFormat,
@@ -25,9 +27,13 @@ pub struct AnnotatedSerializer<'a> {
 }
 
 impl<'a> AnnotatedSerializer<'a> {
-    pub fn new(annotator: Option<&'a dyn Annotate>) -> Self {
+    pub fn new<T>(object: &'a T) -> Self
+    where
+        T: ?Sized + ser::Serialize,
+    {
         AnnotatedSerializer {
-            annotator,
+            ptr: AnyPointer::new(object),
+            annotator: None,
             base: Base::Dec,
             strformat: StrFormat::Standard,
             bytesformat: BytesFormat::Standard,
@@ -85,7 +91,8 @@ impl<'a> AnnotatedSerializer<'a> {
         T: ?Sized + ser::Serialize,
     {
         let mut ser = ser.unwrap_or(self.clone());
-        ser.annotator = value.as_annotate();
+        ser.ptr = AnyPointer::new(value);
+        ser.annotator = None;
         value.serialize(&mut ser)
     }
 }
@@ -198,10 +205,11 @@ impl<'s, 'a> ser::Serializer for &'s mut AnnotatedSerializer<'a> {
 
     fn serialize_unit_variant(
         self,
-        _name: &'static str,
+        name: &'static str,
         _variant_index: u32,
         variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
+        self.annotator = Annotator::cast(name, &self.ptr);
         let node = self.serialize_str(variant)?;
         // TODO(serde-annotate#6): currently, placing a comment on a unit variant results in
         // ugly (json) or bad (yaml) documents.  For now, omit comments on
@@ -216,12 +224,13 @@ impl<'s, 'a> ser::Serializer for &'s mut AnnotatedSerializer<'a> {
 
     fn serialize_newtype_struct<T>(
         self,
-        _name: &'static str,
+        name: &'static str,
         value: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
         T: ?Sized + ser::Serialize,
     {
+        self.annotator = Annotator::cast(name, &self.ptr);
         let field = MemberId::Index(0);
         let node = self.serialize(value, self.annotate(None, &field))?;
         // TODO(serde-annotate#6): currently, placing a comment on a newtype structs results in
@@ -237,7 +246,7 @@ impl<'s, 'a> ser::Serializer for &'s mut AnnotatedSerializer<'a> {
 
     fn serialize_newtype_variant<T>(
         self,
-        _name: &'static str,
+        name: &'static str,
         _variant_index: u32,
         variant: &'static str,
         value: &T,
@@ -245,6 +254,7 @@ impl<'s, 'a> ser::Serializer for &'s mut AnnotatedSerializer<'a> {
     where
         T: ?Sized + ser::Serialize,
     {
+        self.annotator = Annotator::cast(name, &self.ptr);
         let a = self.annotate(Some(variant), &MemberId::Variant);
         let compact = a.map(|a| a.compact).unwrap_or(false);
         let v = self.serialize(value, self.annotate(Some(variant), &MemberId::Index(0)))?;
@@ -273,19 +283,21 @@ impl<'s, 'a> ser::Serializer for &'s mut AnnotatedSerializer<'a> {
 
     fn serialize_tuple_struct(
         self,
-        _name: &'static str,
+        name: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeTupleStruct, Self::Error> {
+        self.annotator = Annotator::cast(name, &self.ptr);
         Ok(SerializeTupleStruct::new(self))
     }
 
     fn serialize_tuple_variant(
         self,
-        _name: &'static str,
+        name: &'static str,
         _variant_index: u32,
         variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeTupleVariant, Self::Error> {
+        self.annotator = Annotator::cast(name, &self.ptr);
         Ok(SerializeTupleVariant::new(self, variant))
     }
 
@@ -295,19 +307,21 @@ impl<'s, 'a> ser::Serializer for &'s mut AnnotatedSerializer<'a> {
 
     fn serialize_struct(
         self,
-        _name: &'static str,
+        name: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
+        self.annotator = Annotator::cast(name, &self.ptr);
         Ok(SerializeStruct::new(self))
     }
 
     fn serialize_struct_variant(
         self,
-        _name: &'static str,
+        name: &'static str,
         _variant_index: u32,
         variant: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
+        self.annotator = Annotator::cast(name, &self.ptr);
         Ok(SerializeStructVariant::new(self, variant))
     }
 }

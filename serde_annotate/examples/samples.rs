@@ -1,10 +1,10 @@
-#![feature(min_specialization)]
 use anyhow::{anyhow, Result};
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
 use serde_annotate::{serialize, Annotate, ColorProfile};
 
 #[derive(Serialize, Deserialize, Annotate, Debug, PartialEq)]
+#[serde(rename="foo::bar::Coordinate", tag="type")]
 struct Coordinate {
     #[annotate(format=hex, comment="X-coordinate")]
     pub x: u32,

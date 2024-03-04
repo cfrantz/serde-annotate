@@ -13,6 +13,8 @@ serde_annotate_derive = {path = "../serde_annotate_derive"}
 pest = "2.2"
 pest_derive = "2.2"
 regex = "1"
+inventory = "0.3.5"
+erased-serde = "0.4.3"
 
 [dev-dependencies]
 anyhow = "1.0"
