@@ -118,10 +118,12 @@ fn impl_struct(input: Struct) -> TokenStream {
     let formats = impl_field_format(&input.fields);
     let comments = impl_field_comment(&input.fields);
     let name = &input.ident;
+    let name_str = name.to_string();
+    let typename = input.attrs.rename.as_deref().unwrap_or(name_str.as_str());
     quote! {
         const _: () = {
             extern crate serde_annotate;
-            use serde_annotate::annotate::{Annotate, Format, MemberId};
+            use serde_annotate::annotate::{Annotate, Format, MemberId, private};
 
             impl Annotate for #name {
                 fn format(&self, _variant: Option<&str>, field: &MemberId) -> Option<Format> {
@@ -136,11 +138,19 @@ fn impl_struct(input: Struct) -> TokenStream {
                         _ => None,
                     }
                 }
-                fn as_annotate(&self) -> Option<&dyn Annotate> { Some(self) }
-                // We don't have to implement `thunk_serialize` because the default implementation
-                // already does what we need.
             }
-            serde_annotate::annotate_ref!(#name);
+            impl #name {
+                unsafe fn into_annotate(object: *const ()) -> &'static dyn Annotate {
+                    // Safety: the caller is required to pass a pointer to an object
+                    // of this type to be cast into a `&dyn Annotate` reference.
+                    &*(object as *const #name)
+                }
+            }
+            private::inventory::submit! {
+                unsafe {
+                    private::Annotator::new(#typename, #name::into_annotate)
+                }
+            }
         };
     }
 }
@@ -148,10 +158,12 @@ fn impl_struct(input: Struct) -> TokenStream {
 fn impl_enum(input: Enum) -> TokenStream {
     let (formats, comments) = impl_variants(&input.variants);
     let name = &input.ident;
+    let name_str = name.to_string();
+    let typename = input.attrs.rename.as_deref().unwrap_or(name_str.as_str());
     quote! {
         const _: () = {
             extern crate serde_annotate;
-            use serde_annotate::annotate::{Annotate, Format, MemberId};
+            use serde_annotate::annotate::{Annotate, Format, MemberId, private};
 
             impl Annotate for #name {
                 fn format(&self, variant: Option<&str>, field: &MemberId) -> Option<Format> {
@@ -168,11 +180,19 @@ fn impl_enum(input: Enum) -> TokenStream {
                         _ => None,
                     }
                 }
-                fn as_annotate(&self) -> Option<&dyn Annotate> { Some(self) }
-                // We don't have to implement `thunk_serialize` because the default implementation
-                // already does what we need.
             }
-            serde_annotate::annotate_ref!(#name);
+            impl #name {
+                unsafe fn into_annotate(object: *const ()) -> &'static dyn Annotate {
+                    // Safety: the caller is required to pass a pointer to an object
+                    // of this type to be cast into a `&dyn Annotate` reference.
+                    &*(object as *const #name)
+                }
+            }
+            private::inventory::submit! {
+                unsafe {
+                    private::Annotator::new(#typename, #name::into_annotate)
+                }
+            }
         };
     }
 }
