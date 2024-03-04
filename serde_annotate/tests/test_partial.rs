@@ -1,4 +1,3 @@
-#![feature(min_specialization)]
 use anyhow::Result;
 use serde_annotate::serialize;
 use serde_annotate::{Document, StrFormat};
@@ -17,6 +16,7 @@ const SERIALIZE_RESULT: &str = r#"{
   ]
 }"#;
 
+#[ignore = "Partial serialization disabled"]
 #[test]
 fn test_partial_serialize() -> Result<()> {
     let p = Partial {
@@ -31,6 +31,7 @@ fn test_partial_serialize() -> Result<()> {
     Ok(())
 }
 
+#[ignore = "Partial serialization disabled"]
 #[test]
 fn test_partial_serialize_error() -> Result<()> {
     let p = Partial {
@@ -49,6 +50,7 @@ fn test_partial_serialize_error() -> Result<()> {
     Ok(())
 }
 
+#[ignore = "Partial deserialization disabled"]
 #[test]
 fn test_partial_deserialize() -> Result<()> {
     let doc = r#"{
@@ -77,6 +79,7 @@ fn test_partial_deserialize() -> Result<()> {
     Ok(())
 }
 
+#[ignore = "Partial deserialization disabled"]
 #[test]
 fn test_partial_deserialize_error() -> Result<()> {
     let p = serde_json::from_str::<Partial>(r#"{"n":5, "doc": []}"#);

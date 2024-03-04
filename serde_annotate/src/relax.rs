@@ -755,7 +755,6 @@ mod tests {
         if let Ok(Document::Sequence(s)) = doc {
             Ok(s)
         } else {
-            println!("doc = {:?}", doc);
             Err(anyhow!("Didn't return Document::Sequence()\n{:?}", doc))
         }
     }
