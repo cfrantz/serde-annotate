@@ -406,11 +406,16 @@ struct Enum<'de> {
 
 impl<'de> Enum<'de> {
     fn new(ev: &'de [Document]) -> Result<Self> {
-        let (e, v) = match ev.len() {
-            0 => Err(Error::StructureError("one value", "none")),
-            1 => ev[0].as_kv(),
-            _ => Err(Error::StructureError("one value", "many")),
-        }?;
+        // We expect only one document node will contain a value.
+        // Filter out non-value-containing nodes and extract the value.
+        let mut values = ev.iter().filter(|&e| Document::has_value(e));
+        let ev = values
+            .next()
+            .ok_or_else(|| Error::StructureError("one value", "none"))?;
+        if values.next().is_some() {
+            return Err(Error::StructureError("one value", "many"));
+        }
+        let (e, v) = ev.as_kv()?;
         Ok(Enum { enm: e, var: v })
     }
 }
